@@ -7,6 +7,8 @@ LIGHTHOUSE_WALLET_CREATE_CMD = """lighthouse account_manager wallet create --tes
 
 LIGHTHOUSE_VALIDATOR_CREATE_CMD = """lighthouse --testnet-dir /tmp/vc/local-testnet/testnet --datadir /tmp/vc/local-testnet/testnet account validator create --wallet-name seed --wallet-password /tmp/seed.pass --count 1"""
 
+LIGHTHOUSE_VC_VALIDATOR_CREATE_CMD = """lighthouse --testnet-dir /tmp/vc/local-testnet/testnet --datadir /tmp/vc/local-testnet/testnet account validator create --wallet-name seed --wallet-password /tmp/seed.pass --count 1 --execution-address {withdraw_address}"""
+
 
 VALIDATOR_DEPOSIT_PY = """\
 from web3 import Web3
@@ -76,4 +78,3 @@ tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
 print(f"[deposit.py] Deposit tx sent! Tx hash: {{w3.to_hex(tx_hash)}}")
 """
-

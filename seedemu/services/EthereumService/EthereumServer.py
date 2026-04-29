@@ -940,7 +940,20 @@ class PoSBeaconSetupServer(EthereumServer):
         self.__genesis = self._blockchain.getGenesis()
 
         node.setFile('/tmp/eth1-genesis.json', self.__genesis.getGenesis())
-        node.setFile("/tmp/mnemonic.yaml", BEACON_MNEMONIC_YAML.format(validator_count = validator_counts, validator_mnemonic=self.getValidatorMnemonic()))
+        mnemonic_lines = []
+        for idx, vid in enumerate(validator_ids):
+            wd_address = self._blockchain.getValidatorWithdrawAddress(vid)
+            assert wd_address, f"PoSBeaconSetupServer::install: missing withdraw address for validator id {vid}."
+            mnemonic_lines.append(
+                f'- mnemonic: "{self.getValidatorMnemonic()}"\n'
+                f"  start: {idx}\n"
+                "  count: 1\n"
+                "  balance: 32000000000\n"
+                f'  wd_address: "{wd_address}"\n'
+                '  wd_prefix: "0x01"\n'
+                "  status: 0\n"
+            )
+        node.setFile("/tmp/mnemonic.yaml", "\n".join(mnemonic_lines))
         node.appendStartCommand('mkdir /local-testnet/testnet')
         # [remove] node.appendStartCommand('bootnode_enr=`cat /local-testnet/bootnode/enr.dat`')
         # [remove] node.appendStartCommand('echo "- $bootnode_enr" > /local-testnet/testnet/boot_enr.yaml')
@@ -994,9 +1007,54 @@ class PoSVcServer(EthereumServer):
         self.__is_beacon_validator_at_running = False
         self.__is_manual_deposit_for_validator = False
         self.__validator_mnemonic = "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete"
+        self.__withdraw_mnemonic = "legal winner thank year wave sausage worth useful legal winner thank yellow"
+        self.__withdraw_account = EthAccount.createEmulatorAccountFromMnemonic(
+            self._id,
+            mnemonic=self.__withdraw_mnemonic,
+            balance=0,
+            index=0,
+            password="admin",
+        )
+        self.__withdraw_address_override = ""
         self.__is_connect_beacon_node = True
         self.__conect_beacon_vnode :str =""
         self.__connected_beacon_ip :str = ""
+
+
+    def _createAccounts(self, eth:EthereumService) -> EthereumServer:
+        super()._createAccounts(eth)
+        return self
+
+    def getWithdrawMnemonic(self) -> str:
+        return self.__withdraw_mnemonic
+
+    def getWithdrawAddress(self) -> str:
+        if self.__withdraw_address_override:
+            return self.__withdraw_address_override
+        return self.__withdraw_account.address
+
+    def getWithdrawAccount(self) -> AccountStructure:
+        return self.__withdraw_account
+
+    def setWithdrawAddress(self, address: str) -> PoSVcServer:
+        assert address, "PoSVcServer::setWithdrawAddress: address cannot be empty."
+        from web3 import Web3
+        self.__withdraw_address_override = Web3.toChecksumAddress(address)
+        return self
+
+    def setWithdrawMnemonic(self, mnemonic: str, index: int = 0, password: str = "admin") -> PoSVcServer:
+        assert mnemonic, "PoSVcServer::setWithdrawMnemonic: mnemonic cannot be empty."
+        self.__withdraw_mnemonic = mnemonic
+        self.__withdraw_account = EthAccount.createEmulatorAccountFromMnemonic(
+            self._id,
+            mnemonic=self.__withdraw_mnemonic,
+            balance=0,
+            index=index,
+            password=password,
+        )
+        self.__withdraw_address_override = ""
+        return self
+
     def install(self, node: Node, eth: EthereumService):
         # if self.__is_beacon_setup_node:
         #     beacon_setup_node = PoSBeaconSetupServer()
@@ -1039,22 +1097,23 @@ class PoSVcServer(EthereumServer):
         if self.__is_beacon_validator_at_running:
             node.setFile('/tmp/seed.pass', 'seedseedseed')
             wallet_create_command = LIGHTHOUSE_WALLET_CREATE_CMD.format(eth_id=self.getId())
-            validator_create_command = LIGHTHOUSE_VALIDATOR_CREATE_CMD.format(eth_id=self.getId()) 
+            validator_create_command = LIGHTHOUSE_VC_VALIDATOR_CREATE_CMD.format(withdraw_address=self.getWithdrawAddress())
 
-            if len(self._accounts) > 0:
-                print(self._accounts[0].keystore_filename)
-                node.setFile('/tmp/deposit.py', VALIDATOR_DEPOSIT_PY.format(keystore_filename=self._accounts[0].keystore_filename))
+            # if len(self._accounts) > 0:
+            #     print(self._accounts[0].keystore_filename)
+            #     node.setFile('/tmp/deposit.py', VALIDATOR_DEPOSIT_PY.format(keystore_filename=self._accounts[0].keystore_filename))
             
-            if not self.__is_manual_deposit_for_validator:
-                validator_deposit_sh = "sleep 2 && python3 /tmp/deposit.py"
+            # if not self.__is_manual_deposit_for_validator:
+            #     validator_deposit_sh = "sleep 2 && python3 /tmp/deposit.py"
 
             # node.appendStartCommand('chmod +x /tmp/deposit.sh')
             # if not self.__is_manual_deposit_for_validator:
             #     validator_deposit_sh = "/tmp/deposit.sh"
-        if self.__is_beacon_validator_at_genesis or self.__is_beacon_validator_at_running:     
+        if self.__is_beacon_validator_at_genesis:     
             vc_start_command = LIGHTHOUSE_VC_CMD.format(ip_address=addr, acct_address=self._accounts[0].address, beacon_node=beacon_node_ip)
         # Write the IP and port of beacon_setup_node to the file.
         node.setFile('/tmp/beacon-setup-node', beacon_setup_node)
+        node.setFile('/tmp/withdraw-address', self.getWithdrawAddress())
         
         # get current node validator index if it's validator at genesis.
         validatorIds = self._blockchain.getValidatorIds()
@@ -1101,10 +1160,10 @@ class PoSVcServer(EthereumServer):
     def enablePOSValidatorAtGenesis(self):
         self.__is_beacon_validator_at_genesis = True
         return self
-    # def enablePOSValidatorAtRunning(self, is_manual:bool=False):
-    #     self.__is_beacon_validator_at_running = True
-    #     self.__is_manual_deposit_for_validator = is_manual
-    #     return self       
+    def enablePOSValidatorAtRunning(self, is_manual:bool=False):
+        self.__is_beacon_validator_at_running = True
+        self.__is_manual_deposit_for_validator = is_manual
+        return self       
     def isValidatorAtRunning(self):
         return self.__is_beacon_validator_at_running
     def isValidatorAtGenesis(self):
