@@ -57,6 +57,7 @@ class Blockchain:
         self._joined_accounts = []
         self._joined_signer_accounts = [] 
         self._validator_ids = [] 
+        self._validator_withdraw_addresses = {}
         self._beacon_setup_node_address = ''  
 
         self._beacon_boot_node_address = []
@@ -65,7 +66,7 @@ class Blockchain:
         self._pending_targets = [] #
         self._emu_mnemonic = "great awesome fun seed security lab protect system network prevent attack future"
         self._total_accounts_per_node = 1
-        self._emu_account_balance = 32 * EthUnit.ETHER.value
+        self._emu_account_balance = 100 * EthUnit.ETHER.value
         self._local_mnemonic = "great amazing fun seed lab protect network system security prevent attack future"
         self._local_accounts_total = 5
         self._local_account_balance = 10 * EthUnit.ETHER.value
@@ -127,7 +128,9 @@ class Blockchain:
                 self._joined_signer_accounts.append(accounts[0])
         if isinstance(server, PoSVcServer):
             if self._consensus == ConsensusMechanism.POS and server.isValidatorAtGenesis():
-                self._validator_ids.append(str(server.getId()))
+                vid = str(server.getId())
+                self._validator_ids.append(vid)
+                self._validator_withdraw_addresses[vid] = server.getWithdrawAddress()
 
     
         server._generateGethStartCommand(str(ifaces[0].getAddress()))
@@ -183,7 +186,6 @@ class Blockchain:
                     if ip:
                         server.setConnectedBeaconIp(ip)
             
-  
         self._genesis.addAccounts(self.getAllAccounts())
         
         if self._consensus in [ConsensusMechanism.POA] :
@@ -251,6 +253,9 @@ class Blockchain:
         @returns List of all validators ids.
         """
         return self._validator_ids
+
+    def getValidatorWithdrawAddress(self, validator_id: str) -> str:
+        return self._validator_withdraw_addresses.get(str(validator_id), "")
 
     def getBeaconSetupNodeIp(self) -> str:
         """!
