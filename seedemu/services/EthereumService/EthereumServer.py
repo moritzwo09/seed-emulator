@@ -775,6 +775,11 @@ class PoSServer(EthereumServer):
 
 class PoSGethServer(EthereumServer):
     def __init__(self, id: int, blockchain:Blockchain):
+        """!
+        @brief Create new geth server.
+
+        @param id The serial number of this server.
+        """
         super().__init__(id, blockchain)
     def _generateGethStartCommand(self, addr:str):
         self._geth_options['pos'] = GethCommandTemplates['pos']
@@ -789,6 +794,13 @@ class PoSGethServer(EthereumServer):
 class PoSBeaconServer(EthereumServer):
     __beacon_peer_counts:int
     def __init__(self, id: int, blockchain:Blockchain):
+
+        """!
+        @brief Create new beacon server.
+
+        @param id The serial number of this server.
+        """
+
         super().__init__(id, blockchain)
  
         self.__beacon_peer_counts = 30
@@ -797,6 +809,12 @@ class PoSBeaconServer(EthereumServer):
         # self.__validator_mnemonic = "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete"
 
     def install(self, node: Node, eth: EthereumService):
+        """!
+        @brief Install the beacon server on the node.
+        
+        @param node The node to install the beacon server on.
+        @param eth The Ethereum service to use.
+        """
         # if self.__is_beacon_setup_node:
         #     beacon_setup_node = PoSBeaconSetupServer()
         #     beacon_setup_node.install(self, node, self._blockchain)
@@ -1002,6 +1020,11 @@ class PoSBeaconSetupServer(EthereumServer):
 class PoSVcServer(EthereumServer):
 
     def __init__(self, id: int, blockchain:Blockchain):
+        """!
+        @brief Create new vc server.
+
+        @param id The serial number of this server.
+        """
         super().__init__(id, blockchain)
         self.__is_beacon_validator_at_genesis = False
         self.__is_beacon_validator_at_running = False
@@ -1022,13 +1045,27 @@ class PoSVcServer(EthereumServer):
 
 
     def _createAccounts(self, eth:EthereumService) -> EthereumServer:
+        """!
+        @brief Create withdraw account.
+
+        """
         super()._createAccounts(eth)
         return self
 
     def getWithdrawMnemonic(self) -> str:
+        """!
+        @brief Get the withdraw account mnemonic.
+
+        @return The withdraw account mnemonic.
+        """
         return self.__withdraw_mnemonic
 
     def getWithdrawAddress(self) -> str:
+        """!
+        @brief Get the withdraw account address.
+
+        @return The withdraw account address.
+        """
         if self.__withdraw_address_override:
             return self.__withdraw_address_override
         return self.__withdraw_account.address
@@ -1037,12 +1074,28 @@ class PoSVcServer(EthereumServer):
         return self.__withdraw_account
 
     def setWithdrawAddress(self, address: str) -> PoSVcServer:
+        """!
+        @brief Set the withdraw account address.
+
+        @param address The withdraw account address.
+        """
+        if address == "":
+            return self
         assert address, "PoSVcServer::setWithdrawAddress: address cannot be empty."
         from web3 import Web3
         self.__withdraw_address_override = Web3.toChecksumAddress(address)
         return self
 
     def setWithdrawMnemonic(self, mnemonic: str, index: int = 0, password: str = "admin") -> PoSVcServer:
+        """!
+        @brief Set the withdraw account mnemonic.
+
+        @param mnemonic The withdraw account mnemonic.
+        @param index The index of the withdraw account.
+        @param password The password to use.
+        """
+        if mnemonic == "":
+            return self
         assert mnemonic, "PoSVcServer::setWithdrawMnemonic: mnemonic cannot be empty."
         self.__withdraw_mnemonic = mnemonic
         self.__withdraw_account = EthAccount.createEmulatorAccountFromMnemonic(
@@ -1056,6 +1109,10 @@ class PoSVcServer(EthereumServer):
         return self
 
     def install(self, node: Node, eth: EthereumService):
+        """!
+        @brief Install the vc server on the node.
+
+        """
         # if self.__is_beacon_setup_node:
         #     beacon_setup_node = PoSBeaconSetupServer()
         #     beacon_setup_node.install(self, node, self._blockchain)
@@ -1096,8 +1153,8 @@ class PoSVcServer(EthereumServer):
         #     bootnode_start_command = LIGHTHOUSE_BOOTNODE_CMD.format(ip_address=addr)
         if self.__is_beacon_validator_at_running:
             node.setFile('/tmp/seed.pass', 'seedseedseed')
-            wallet_create_command = LIGHTHOUSE_WALLET_CREATE_CMD.format(eth_id=self.getId())
-            validator_create_command = LIGHTHOUSE_VC_VALIDATOR_CREATE_CMD.format(withdraw_address=self.getWithdrawAddress())
+            # wallet_create_command = LIGHTHOUSE_WALLET_CREATE_CMD.format(eth_id=self.getId())
+            # validator_create_command = LIGHTHOUSE_VC_VALIDATOR_CREATE_CMD.format(withdraw_address=self.getWithdrawAddress())
 
             # if len(self._accounts) > 0:
             #     print(self._accounts[0].keystore_filename)
