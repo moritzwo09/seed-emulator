@@ -13,7 +13,6 @@ Use the following code to create a validator-at-running container in the PoS exa
 ```python
 vc_at_running_1: PoSVcServer = blockchain.createVcNode("vcnodeAtruning")
 vc_at_running_1.appendClassName("Ethereum-POS-Validator-Atruning")
-vc_at_running_1.addHostName("vcatrunning1" + DOMAIN)
 vc_at_running_1.connectToBeaconNode("beaconnode0")
 vc_at_running_1.enablePOSValidatorAtRunning()
 ```
