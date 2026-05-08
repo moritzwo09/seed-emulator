@@ -50,8 +50,16 @@ tail -f /tmp/lighthouse-vc.log
 ```
 to follow the Lighthouse VC logs.
 
+When you see the following entries in the logs, it indicates the VC has started participating in block proposal and attestation.
+
+```bash
+May 08 03:34:21.002 INFO Requesting unsigned block               slot: 370, service: block
+May 08 03:34:21.009 INFO Received unsigned block                 slot: 370, service: block
+May 08 03:34:21.011 INFO Publishing signed block                 signing_time_ms: 2, slot: 370, service: block
+May 08 03:34:21.028 INFO Successfully published block            slot: 370, graffiti: None, attestations: 0, deposits: 0, block_type: Full, service: block
+```
 You can also query the Beacon API to observe the validator-at-running status:
 ```bash
 curl -s http://10.151.0.73:8000/eth/v1/beacon/states/head/validators | jq
 ```
-In practice, after roughly 5 epochs the validator state becomes pending, and after roughly 6 epochs it becomes active.
+In practice, after roughly 5 epochs the validator state becomes pending, and after roughly 11 epochs it becomes active.
