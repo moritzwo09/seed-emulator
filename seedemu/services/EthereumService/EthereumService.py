@@ -122,7 +122,7 @@ class Blockchain:
         if len(accounts) > 0:
             if isinstance(server, PoSVcServer):
                 if self._consensus == ConsensusMechanism.POS and server.isValidatorAtRunning():
-                    accounts[0].balance = 33 * EthUnit.ETHER.value
+                    accounts[0].balance = 100 * EthUnit.ETHER.value
             self._joined_accounts.extend(accounts)
             if self._consensus in [ConsensusMechanism.POA] and server.isStartMiner():
                 self._joined_signer_accounts.append(accounts[0])

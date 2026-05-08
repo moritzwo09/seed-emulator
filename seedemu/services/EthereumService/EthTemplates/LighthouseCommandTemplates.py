@@ -7,7 +7,6 @@ LIGHTHOUSE_WALLET_CREATE_CMD = """lighthouse account_manager wallet create --tes
 
 LIGHTHOUSE_VALIDATOR_CREATE_CMD = """lighthouse --testnet-dir /tmp/vc/local-testnet/testnet --datadir /tmp/vc/local-testnet/testnet account validator create --wallet-name seed --wallet-password /tmp/seed.pass --count 1"""
 
-LIGHTHOUSE_VC_VALIDATOR_CREATE_CMD = """lighthouse --testnet-dir /tmp/vc/local-testnet/testnet --datadir /tmp/vc/local-testnet/testnet account validator create --wallet-name seed --wallet-password /tmp/seed.pass --count 1 --execution-address {withdraw_address}"""
 
 
 VALIDATOR_DEPOSIT_PY = """\
