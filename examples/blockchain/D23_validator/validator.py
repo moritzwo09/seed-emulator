@@ -5,12 +5,8 @@ from seedemu import *
 from examples.blockchain.D01_ethereum_pos import ethereum_pos
 import os, sys
 
-DOMAIN = ".net"
 
-def installSoftware(node: Node):
-    software_list = ["expect"]
-    for software in software_list:
-        node.addSoftware(software)
+
 
 def run(dumpfile = None, total_beacon_nodes=3, vc_per_beacon=3):
     ###############################################################################
@@ -42,14 +38,12 @@ def run(dumpfile = None, total_beacon_nodes=3, vc_per_beacon=3):
 
     eth = emu.getLayer("EthereumService")
     blockchain = eth.getBlockchainByName(eth.getBlockchainNames()[0])
-
+    # Create a validator-at-running container
     vc_at_running_1: PoSVcServer = blockchain.createVcNode("vcnodeAtruning")
     vc_at_running_1.appendClassName("Ethereum-POS-Validator-Atruning")
-    vc_at_running_1.addHostName("vcatrunning1" + DOMAIN)
     vc_at_running_1.connectToBeaconNode("beaconnode0")
     vc_at_running_1.enablePOSValidatorAtRunning()
     emu.getVirtualNode("vcnodeAtruning").setDisplayName("Ethereum-POS-Validator-Atruning-1")
-    installSoftware(emu.getVirtualNode("vcnodeAtruning"))
 
     
 
