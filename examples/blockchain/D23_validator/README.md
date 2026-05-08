@@ -58,6 +58,13 @@ May 08 03:34:21.009 INFO Received unsigned block                 slot: 370, serv
 May 08 03:34:21.011 INFO Publishing signed block                 signing_time_ms: 2, slot: 370, service: block
 May 08 03:34:21.028 INFO Successfully published block            slot: 370, graffiti: None, attestations: 0, deposits: 0, block_type: Full, service: block
 ```
+```bash
+INFO Successfully published attestations     type: unaggregated, slot: 1574, committee_index: 0, head_block: 0xc649a3b3d2b7cf8c461667affa34037ea41b1d58b325bcf70390549794fcb865, validator_indices: [9], count: 1, service: attestation
+May 08 07:35:15.001 INFO Connected to beacon node(s)             synced: 1, available: 1, total: 1, primary: http://10.151.0.72:8000/, service: notifier
+May 08 07:35:15.001 INFO All validators active                   slot: 1574, epoch: 49, total_validators: 1, active_validators: 1, current_epoch_proposers: 2, service: notifier
+May 08 07:35:17.004 INFO Successfully published attestation      type: aggregated, slot: 1574, committee_index: 0, head_block: 0xc649a3b3d2b7cf8c461667affa34037ea41b1d58b325bcf70390549794fcb865, signatures: 1, aggregator: 9, service: attestation
+
+```
 You can also query the Beacon API to observe the validator-at-running status:
 ```bash
 curl -s http://10.151.0.73:8000/eth/v1/beacon/states/head/validators | jq
