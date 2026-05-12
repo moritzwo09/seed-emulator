@@ -1,7 +1,5 @@
 from __future__ import annotations
-from readline import insert_text
 from seedemu.core import Node, Server, BaseSystem
-from tests.ethereum import POA
 from .EthEnum import *
 from .EthUtil import *
 from typing import List
