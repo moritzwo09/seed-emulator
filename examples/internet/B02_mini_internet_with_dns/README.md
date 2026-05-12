@@ -148,3 +148,19 @@ customization will be carried to the physical nodes. This way,
 the customization can be done when a virtual node is created, instead
 of waiting for it to be bound to a physical node.
 Our DNS component is already modified to use the new design. 
+
+
+## Interacting with Nameservers Using `nsupdate`
+
+After the emulator starts running, we can use the `nsupdate` command to interact with the nameservers. All the nameservers inside the emulator are configured with the following setting inside the `/etc/bind/named.conf.options` file:
+```
+allow-update { any; };
+```
+
+This allows anyone to update the DNS records on this server. We have provided an example `add_record.sh` in the current folder to demonstrate how to add a record to the `example.net` server. Run the following:
+```
+./add_record.sh 1.2.3.4
+```
+
+After running it, go to any container, and run `"dig www.example.net"`, you will see that the IP address of `www.example.net` becomes `1.2.3.4`. Users can refer to the manual of `nsupdate` for more examples.
+
