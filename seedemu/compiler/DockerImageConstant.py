@@ -58,7 +58,7 @@ ETHEREUM_IMAGE_ARM64_LEGACY = DockerImage(name='handsonsecurity/seedemu-ethereum
                                 software=['software-properties-common', 'python3', 'python3-pip'],
                                 subset=BASE_IMAGE_ARM64)
 
-ETHEREUM_IMAGE_ARM64_POS = DockerImage(name='handsonsecurity/seedemu-ethereum-arm64:pos',
+ETHEREUM_IMAGE_ARM64_POS = DockerImage(name='handsonsecurity/seedemu-ethereum-arm64:pos2.0',
                                 software=['software-properties-common', 'python3', 'python3-pip'],
                                 subset=BASE_IMAGE_ARM64)
 
