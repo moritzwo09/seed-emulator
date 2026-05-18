@@ -18,7 +18,7 @@ vc_at_running_1.enablePOSValidatorAtRunning()
 ```
 
 ## 2. Start the emulator environment
-
+：/
 Run the following commands on the host machine:
 
 ```bash
@@ -70,3 +70,12 @@ You can also query the Beacon API to observe the validator-at-running status:
 curl -s http://10.151.0.73:8000/eth/v1/beacon/states/head/validators | jq
 ```
 In practice, after roughly 5 epochs the validator state becomes pending, and after roughly 11 epochs it becomes active.
+
+
+## About the test script test_vcatruning.py
+You need to start the instance first. Then follow the steps above: run the vc_start_at_running.sh script, and finally run the test script.
+
+The test script checks whether vcnodeAtruning has successfully joined vcatrunning . The whole process takes about 11 epochs, and during that time it will continuously print messages like:
+```
+t=12s epoch=2 validators=9 waiting_for_vcatrunning_active rank=10
+```
