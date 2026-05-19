@@ -103,3 +103,6 @@ networks are worthless. To enable that, turn on the following switch.
 
   Select this to show fiat conversion on test networks
   ```
+
+- Problem: MetaMask can connect to our blockchain and the account can be created, but MetaMask gets stuck when sending transactions.
+If you are in Mainland China, the possible reason is that your browser does not have a system proxy. You can configure the proxy in the browser settings or directly configure the system proxy for your machine.
