@@ -1,0 +1,5 @@
+/emulate/output/
+/kvm_ovn_ovs/setup/
+/kvm_ovn_ovs/running/
+/physical_ovn_ovs/setup/
+/physical_ovn_ovs/running/
