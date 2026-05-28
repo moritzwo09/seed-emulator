@@ -168,7 +168,6 @@ installKubeOvn() {
     # Install Kube-OVN in non-primary mode. Kube-OVN's CNI binary is placed into
     # the K3s CNI bin dir so Multus can invoke type=kube-ovn delegates.
     local helm_bin="$1"
-    export KUBECONFIG="${outputKubeconfig}"
 
     "${helm_bin}" repo add "${ovnHelmRepoName}" "${ovnHelmRepoUrl}" >/dev/null 2>&1 || true
     "${helm_bin}" repo update >/dev/null
@@ -177,6 +176,7 @@ installKubeOvn() {
 
     echo "[ovn] installing Kube-OVN ${ovnChartVersion} in non-primary CNI mode"
     "${helm_bin}" upgrade --install "${ovnReleaseName}" "${ovnHelmRepoName}/kube-ovn" \
+        --kubeconfig "${outputKubeconfig}" \
         --namespace "${ovnNamespace}" \
         --version "${ovnChartVersion}" \
         --set cni_conf.NON_PRIMARY_CNI=true \

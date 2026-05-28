@@ -216,7 +216,7 @@ kubectl -n "${SEED_NAMESPACE}" exec -it "${POD}" -- sh
 | `applyK3sCluster.sh` | 安装 K3s、配置 registry、导入 bootstrap 镜像、生成 kubeconfig 和 inventory。 |
 | `kvm/destroyKvmVms.sh` | 根据 `kvmState.yaml` 清理 VM、磁盘、cloud-init 和 DHCP reservation；根目录 `destroyKvmVms.sh` 是便捷包装入口。 |
 | `kvm/manageKvmConfig.py` | KVM 阶段 YAML 解析器，负责生成 VM 计划、`configK3s.yaml` 和 `kvmState.yaml`。 |
-| `manageK3sConfig.py` | K3s 阶段 YAML 解析器，负责生成临时 Ansible inventory 和持久 cluster inventory；`write-running-config` 仅保留为旧流程兼容命令。 |
+| `manageK3sConfig.py` | K3s 阶段 YAML 解析器，负责生成临时 Ansible inventory 和持久 cluster inventory。 |
 | `ansible/k3s-install.yml` | K3s 安装使用的静态 Ansible playbook 模板，必须保留。 |
 
 ## 关键产物

@@ -47,7 +47,7 @@ class NativeKubernetesCompiler(Docker):
         image_registry_prefix: str = "seedemu",
         registry_prefix: str | None = None,
         namespace: str = "seedemu-k3s-real-topo",
-        cni_type: str = "macvlan",
+        cni_type: str = "kube-ovn",
         cni_master_interface: str = "ens2",
         image_pull_policy: str = "Always",
         # use_multus: bool = True,

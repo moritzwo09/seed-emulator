@@ -179,7 +179,7 @@ class K8sPre:
                     "writeK3sBuildScripts(config=...) expects configK3s.yaml with a nodes list. "
                     "For the KVM flow, run installKvmVms.sh first so it generates configK3s.yaml."
                 )
-            k3s_config = makeK3sConfig(config=config, setup_dir=setup_dir)
+            k3s_config = makeK3sConfig(config=config)
             writeYaml(setup_dir / "configK3s.yaml", k3s_config)
         elif (setup_dir / "configK3s.yaml").exists():
             k3s_config = loadYaml(setup_dir / "configK3s.yaml")
@@ -210,7 +210,7 @@ class K8sPre:
 
         Args:
             path: Output root. A temporary root is used when omitted.
-            config: Optional kvm.yaml source.
+            config: Optional configK3s.yaml source.
             overwrite: Replace generated scripts before execution.
         """
         base_dir = Path(path).expanduser() if path is not None else Path(
@@ -254,7 +254,7 @@ class K8sPre:
             config_data = loadYaml(config)
             if "nodes" not in config_data:
                 raise ValueError("writePhysicalNodeScripts(config=...) expects configK3s.yaml with a nodes list")
-            k3s_config = makeK3sConfig(config=config, setup_dir=setup_dir)
+            k3s_config = makeK3sConfig(config=config)
             _applyPhysicalConnectionDefault(k3s_config, connection)
             writeYaml(setup_dir / "configK3s.yaml", k3s_config)
         elif (setup_dir / "configK3s.yaml").exists():
@@ -644,13 +644,3 @@ def _loadSetupYamlIfPresent(path: Path) -> dict[str, Any]:
         return loadYaml(path)
     except Exception:
         return {}
-
-
-# Backward-compatible aliases for the first prototype API.
-K8sPre.kvminstall_script = K8sPre.writeKvmInstallScripts
-K8sPre.kvminstall = K8sPre.installKvmVms
-K8sPre.k8sbuild_script = K8sPre.writeK3sBuildScripts
-K8sPre.k8sbuild = K8sPre.buildK3sCluster
-K8sPre.running_scripts = K8sPre.writeRunningScripts
-K8sPre.physical_node_scripts = K8sPre.writePhysicalNodeScripts
-K8sPre.physical_nodes = K8sPre.preparePhysicalNodes

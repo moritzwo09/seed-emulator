@@ -89,11 +89,3 @@ def writeExecutableScript(path: str | Path, content: str) -> Path:
     mode = script.stat().st_mode
     script.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return script
-
-
-# Backward-compatible aliases for the first prototype helpers.
-resource_path = resourcePath
-copy_tree = copyTree
-copy_resource_items = copyResourceItems
-chmod_scripts = chmodScripts
-write_executable_script = writeExecutableScript

@@ -379,28 +379,9 @@ def nodes(data: dict[str, Any], existing: list[dict[str, str]] | None = None) ->
     return out
 
 
-def master_node(data: dict[str, Any]) -> dict[str, Any]:
-    return [node for node in nodes(data) if node["role"] == "master"][0]
-
-
 def optional_master_node(data: dict[str, Any], existing: list[dict[str, str]] | None = None) -> dict[str, Any] | None:
     masters = [node for node in nodes(data, existing) if node["role"] == "master"]
     return masters[0] if masters else None
-
-
-def install_version(data: dict[str, Any]) -> str:
-    version = str(get_nested(data, "k3s.version", "v1.28.5+k3s1"))
-    artifact = str(get_nested(data, "k3s.artifact_url", "https://rancher-mirror.rancher.cn/k3s"))
-    configured = get_nested(data, "k3s.install_version")
-    if configured:
-        return str(configured)
-    if "rancher-mirror.rancher.cn/k3s" in artifact:
-        return version.replace("+", "-")
-    return version
-
-
-def shell_env(args: argparse.Namespace) -> None:
-    kvm_env(args)
 
 
 def kvm_env(args: argparse.Namespace) -> None:
@@ -460,61 +441,6 @@ def nodes_tsv(args: argparse.Namespace) -> None:
                 for key in ("name", "role", "ip", "mac", "vcpus", "memory_mb", "disk_gb")
             )
         )
-
-
-def write_inventory(args: argparse.Namespace) -> None:
-    data = load_config(args.config)
-    cluster_name = str(data.get("cluster_name", "seedemu-k3s"))
-    master = master_node(data)
-    output = Path(args.output or expand_path(str(get_nested(data, "outputs.inventory", SETUP_DIR / f"{cluster_name}.inventory.yaml"))))
-    payload = {
-        "cluster_name": cluster_name,
-        "reference_cluster": False,
-        "runtime": "k3s",
-        "max_validated_topology_size": int(get_nested(data, "max_validated_topology_size", 12000)),
-        "k3s": {
-            "cluster_cidr": get_nested(data, "k3s.cluster_cidr", "10.42.0.0/16"),
-            "service_cidr": get_nested(data, "k3s.service_cidr", "10.43.0.0/16"),
-            "node_cidr_mask_size_ipv4": int(get_nested(data, "k3s.node_cidr_mask_size_ipv4", 20)),
-            "max_pods": int(get_nested(data, "k3s.max_pods", 4000)),
-        },
-        "network_tuning": {
-            "cni0_hash_max": int(get_nested(data, "tuning.cni0_hash_max", 16384)),
-            "user_max_net_namespaces": int(get_nested(data, "tuning.user_max_net_namespaces", 65536)),
-            "neigh_gc_thresh1": int(get_nested(data, "tuning.neigh_gc_thresh1", 1048576)),
-            "neigh_gc_thresh2": int(get_nested(data, "tuning.neigh_gc_thresh2", 4194304)),
-            "neigh_gc_thresh3": int(get_nested(data, "tuning.neigh_gc_thresh3", 8388608)),
-            "netdev_max_backlog": int(get_nested(data, "tuning.netdev_max_backlog", 1000000)),
-            "optmem_max": int(get_nested(data, "tuning.optmem_max", 25165824)),
-        },
-        "ssh": {
-            "user": get_nested(data, "ssh.user", "ubuntu"),
-            "default_key_path": get_nested(data, "ssh.key", "~/.ssh/id_ed25519"),
-        },
-        "registry": {
-            "host": get_nested(data, "registry.host", master["ip"]),
-            "port": int(get_nested(data, "registry.port", 5000)),
-        },
-        "cni": {"default_master_interface": get_nested(data, "cni.default_master_interface", "ens2")},
-        "nodes": [
-            {
-                "name": node["name"],
-                "role": node["role"],
-                "management_ip": node["ip"],
-                "runtime": "k3s",
-                "resources": {
-                    "vcpus": node["vcpus"],
-                    "memory_mb": node["memory_mb"],
-                    "disk_gb": node["disk_gb"],
-                },
-                "labels": {"kubernetes.io/hostname": node["name"]},
-            }
-            for node in nodes(data)
-        ],
-    }
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    print(output)
 
 
 def read_nodes_tsv(path: str) -> list[dict[str, Any]]:
@@ -758,72 +684,16 @@ def validate_kvm_state(args: argparse.Namespace) -> None:
         )
 
 
-def write_ansible_inventory(args: argparse.Namespace) -> None:
-    data = load_config(args.config)
-    all_nodes = nodes(data)
-    master = [node for node in all_nodes if node["role"] == "master"][0]
-    workers = [node for node in all_nodes if node["role"] == "worker"]
-    payload = {
-        "all": {
-            "vars": {
-                "ansible_user": get_nested(data, "ssh.user", "ubuntu"),
-                "ansible_ssh_private_key_file": expand_path(str(get_nested(data, "ssh.key", "~/.ssh/id_ed25519"))),
-                "k3s_version": get_nested(data, "k3s.version", "v1.28.5+k3s1"),
-                "k3s_install_version": install_version(data),
-                "seed_registry_host": get_nested(data, "registry.host", master["ip"]),
-                "seed_registry_port": get_nested(data, "registry.port", 5000),
-                "seed_docker_io_mirror_endpoint": get_nested(data, "registry.docker_io_mirror_endpoint", "https://docker.m.daocloud.io"),
-                "seed_k3s_artifact_url": get_nested(data, "k3s.artifact_url", "https://rancher-mirror.rancher.cn/k3s"),
-                "seed_cni_master_interface": get_nested(data, "cni.default_master_interface", "ens2"),
-                "seed_k3s_cluster_cidr": get_nested(data, "k3s.cluster_cidr", "10.42.0.0/16"),
-                "seed_k3s_service_cidr": get_nested(data, "k3s.service_cidr", "10.43.0.0/16"),
-                "seed_k3s_node_cidr_mask_size_ipv4": get_nested(data, "k3s.node_cidr_mask_size_ipv4", 20),
-                "seed_k3s_max_pods": get_nested(data, "k3s.max_pods", 4000),
-                "seed_k3s_force_reinstall": bool(get_nested(data, "k3s.force_reinstall", False)),
-            },
-            "children": {
-                "master": {
-                    "hosts": {
-                        master["name"]: {
-                            "ansible_host": master["ip"],
-                            "k3s_role": "server",
-                            "seedemu_as_group": "master",
-                        }
-                    }
-                },
-                "workers": {
-                    "hosts": {
-                        node["name"]: {
-                            "ansible_host": node["ip"],
-                            "k3s_role": "agent",
-                            "seedemu_as_group": f"worker-{idx}",
-                        }
-                        for idx, node in enumerate(workers, start=1)
-                    }
-                },
-            },
-        }
-    }
-    output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    print(output)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("shell-vars").set_defaults(func=shell_env)
     kvm_env_parser = sub.add_parser("kvm-vars")
     kvm_env_parser.add_argument("--existing-tsv")
     kvm_env_parser.set_defaults(func=kvm_env)
     nodes_parser = sub.add_parser("nodes-tsv")
     nodes_parser.add_argument("--existing-tsv")
     nodes_parser.set_defaults(func=nodes_tsv)
-    inv = sub.add_parser("write-inventory")
-    inv.add_argument("--output")
-    inv.set_defaults(func=write_inventory)
     k3s = sub.add_parser("write-k3s-config")
     k3s.add_argument("--nodes-tsv")
     k3s.add_argument("--output")
@@ -841,9 +711,6 @@ def main() -> int:
     validate = sub.add_parser("validate-kvm-state")
     validate.add_argument("--state", required=True)
     validate.set_defaults(func=validate_kvm_state)
-    ansible = sub.add_parser("write-ansible-inventory")
-    ansible.add_argument("--output", required=True)
-    ansible.set_defaults(func=write_ansible_inventory)
     args = parser.parse_args()
     args.func(args)
     return 0

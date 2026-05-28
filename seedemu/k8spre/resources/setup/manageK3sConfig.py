@@ -662,28 +662,6 @@ def commandWriteClusterInventory(args: argparse.Namespace) -> None:
     print(vals["outputInventory"])
 
 
-def commandWriteRunningConfig(args: argparse.Namespace) -> None:
-    """Write legacy configRunning.yaml for running/Makefile.
-
-    Args:
-        args.config: Source configK3s.yaml path.
-        args.output_dir: Optional compile output directory.
-        args.image_registry_prefix: Logical image prefix in k8s.yaml.
-        args.rollout_timeout_seconds: Rollout wait timeout for make up/wait.
-    """
-    data = loadYaml(args.config)
-    output_dir = args.output_dir or str(SETUP_DIR.parent / "emulate" / "output")
-    output_path = expandPath(str(getNested(data, "outputs.runningConfig", SETUP_DIR / "configRunning.yaml")))
-    payload = {
-        "setupConfig": str(Path(args.config).expanduser().resolve()),
-        "outputDir": expandPath(output_dir),
-        "imageRegistryPrefix": args.image_registry_prefix,
-        "rolloutTimeoutSeconds": int(args.rollout_timeout_seconds),
-    }
-    _writeYaml(output_path, payload)
-    print(output_path)
-
-
 def _writeYaml(path: str, payload: dict[str, Any]) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -720,12 +698,6 @@ def main() -> int:
 
     cluster = sub.add_parser("write-cluster-inventory")
     cluster.set_defaults(func=commandWriteClusterInventory)
-
-    running = sub.add_parser("write-running-config")
-    running.add_argument("--output-dir")
-    running.add_argument("--image-registry-prefix", default="seedemu")
-    running.add_argument("--rollout-timeout-seconds", default="1800")
-    running.set_defaults(func=commandWriteRunningConfig)
 
     args = parser.parse_args()
     args.func(args)

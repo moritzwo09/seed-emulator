@@ -199,7 +199,6 @@ def makeRunningConfig(
 def makeK3sConfig(
     *,
     config: str | Path | None = None,
-    setup_dir: str | Path | None = None,
     cluster_name: str = "seedemu-k3s",
     ssh_user: str = "ubuntu",
     ssh_key: str = "~/.ssh/id_ed25519",
@@ -210,13 +209,11 @@ def makeK3sConfig(
     Args:
         config: Optional YAML containing at least a nodes list. A minimal node
             item can be {"ip": "192.168.122.10"}; name/role are inferred later.
-        setup_dir: Generated setup directory; used to derive output paths.
         cluster_name: Default K3s cluster name.
         ssh_user: Default SSH user for all nodes.
         ssh_key: Default SSH private key path.
         registry_port: Default registry port on the master.
     """
-    setup_path = Path(setup_dir).expanduser().resolve() if setup_dir is not None else None
     data = copy.deepcopy(loadYaml(config)) if config is not None else {}
     effective_cluster_name = str(data.get("clusterName") or data.get("cluster_name") or cluster_name)
     data["clusterName"] = effective_cluster_name
@@ -327,11 +324,3 @@ def _normalizeLegacyOutputKeys(data: dict[str, Any]) -> None:
     for old, new in aliases.items():
         if old in data and new not in data:
             data[new] = data.pop(old)
-
-
-# Backward-compatible aliases for callers that still use the first prototype.
-load_yaml = loadYaml
-write_yaml = writeYaml
-make_kvm_config = makeKvmConfig
-make_k3s_config = makeK3sConfig
-make_running_config = makeRunningConfig

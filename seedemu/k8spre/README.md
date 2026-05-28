@@ -35,8 +35,6 @@ make build
 make up
 ```
 
-兼容旧 API：`kvminstall_script`、`k8sbuild_script`、`running_scripts` 仍可用，但新代码建议使用上面的 lowerCamelCase 函数。
-
 生成后的 `setup/README.md` 会被 API 自动写入本次目录对应的 kubeconfig 路径和默认实验 namespace，方便用户直接复制 `kubectl` 查看命令。
 
 ## 两种支持形式总览
@@ -346,7 +344,7 @@ rolloutTimeoutSeconds: 1800
 - `destroyPhysicalCluster.sh`：卸载真实物理机 K3s、移除 registry 容器并清理 fabric。
 - `kvm/destroyKvmVms.sh`：从 `kvmState.yaml` 清理本轮 VM、磁盘、cloud-init、DHCP reservation；根目录 `destroyKvmVms.sh` 是便捷包装入口。
 - `kvm/manageKvmConfig.py`：KVM 阶段 YAML 解析、节点计划、`configK3s.yaml` 和 `kvmState.yaml` 生成。
-- `manageK3sConfig.py`：K3s 阶段 YAML 解析、临时 Ansible inventory 和持久 cluster inventory 生成；`write-running-config` 仅保留为旧流程兼容命令。
+- `manageK3sConfig.py`：K3s 阶段 YAML 解析、临时 Ansible inventory 和持久 cluster inventory 生成。
 - `ansible/k3s-install.yml`：静态 Ansible playbook 模板，必须保留。
 
 `running/` 资源：
