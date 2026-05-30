@@ -60,7 +60,7 @@ def run_monitor(
 
             if count < rank:
                 if epoch != last_epoch_printed:
-                    print("t={}s epoch={} validators={} waiting_for_vcatrunning_active rank={}".format(elapsed, epoch, count, rank))
+                    print("t={}s epoch={} validators={} waiting_for_validator_at_running_active rank={}".format(elapsed, epoch, count, rank))
                     last_epoch_printed = epoch
                 time.sleep(interval_secs)
                 continue
