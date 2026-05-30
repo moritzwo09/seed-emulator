@@ -84,12 +84,12 @@ def run(dumpfile = None, total_beacon_nodes=5, vc_per_beacon=3):
         emu.getVirtualNode(f'vcnode{i}').setDisplayName(f'Ethereum-POS-Validator-{i+1}')
     # Create the Validator node and enablePOSValidatorAtRunning
     # and connect to the Beacon node 
-    vc_at_running_1: PoSVcServer = blockchain.createVcNode("vcnodeAtruning")
-    vc_at_running_1.appendClassName("Ethereum-POS-Validator-Atruning")
+    vc_at_running_1: PoSVcServer = blockchain.createVcNode("vcnodeAtRunning")
+    vc_at_running_1.appendClassName("Ethereum-POS-Validator-AtRunning")
     vc_at_running_1.connectToBeaconNode("beaconnode0")
     vc_at_running_1.enablePOSValidatorAtRunning()
     vc_nodes.append(vc_at_running_1)
-    emu.getVirtualNode("vcnodeAtruning").setDisplayName("Ethereum-POS-Validator-Atruning-1")
+    emu.getVirtualNode("vcnodeAtRunning").setDisplayName("Ethereum-POS-Validator-AtRunning-1")
     # Create the Faucet server
     faucet:FaucetServer = blockchain.createFaucetServer(
                 vnode='faucet',
