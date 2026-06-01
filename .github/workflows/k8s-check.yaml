@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - development
+      - k8s-new
     paths:
       - ".github/workflows/k8s-check.yaml"
       - "MANIFEST.in"
@@ -33,6 +34,7 @@ env:
   PYTHON_VERSION: "3.10"
   K8S_NAMESPACE: seedemu-k8s-b61
   K8S_IMAGE_REGISTRY_PREFIX: seedemu
+  K8S_OUTPUT_DIR: /tmp/seedemu-k8s-output
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -60,8 +62,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: k8s-static
     timeout-minutes: 20
-    env:
-      K8S_OUTPUT_DIR: ${{ runner.temp }}/seedemu-k8s-output
     steps:
       - name: Check out the source repository
         uses: actions/checkout@v4
@@ -99,8 +99,6 @@ jobs:
     needs: k8s-compile
     timeout-minutes: 45
     if: ${{ github.event_name == 'pull_request' || github.event.inputs.build_images == 'true' }}
-    env:
-      K8S_OUTPUT_DIR: ${{ runner.temp }}/seedemu-k8s-output
     steps:
       - name: Check out the source repository
         uses: actions/checkout@v4
