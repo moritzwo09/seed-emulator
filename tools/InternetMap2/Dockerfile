@@ -1,6 +1,6 @@
 FROM node:22-slim AS builder
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9.15.9
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 RUN pnpm i
