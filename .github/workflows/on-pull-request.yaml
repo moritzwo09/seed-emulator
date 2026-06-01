@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - development
+      - development-ipv6
   workflow_dispatch:
     inputs:
       run-quick-tests:
@@ -29,6 +30,11 @@ on:
         default: "false"
       run-scion-tests:
         description: "Run SCION tests | Compile and builds all the SCION examples - Runs SCION tests"
+        type: boolean
+        required: false
+        default: "false"
+      run-real-world-tests:
+        description: "Run tests that depend on real external network reachability"
         type: boolean
         required: false
         default: "false"
@@ -93,6 +99,7 @@ jobs:
       INTERNET_TESTS: ${{ github.event.inputs.run-internet-tests || 'true' }}
       BLOCKCHAIN_TESTS: ${{ github.event.inputs.run-blockchain-tests || 'false' }}
       QUICK_TESTS: ${{ github.event.inputs.run-quick-tests || 'false' }}
+      SEED_EMU_RUN_REAL_WORLD_TESTS: ${{ github.event.inputs.run-real-world-tests || 'false' }}
     steps:
       - name: Check out the source repository
         uses: actions/checkout@v4
