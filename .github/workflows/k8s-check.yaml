@@ -1,0 +1,125 @@
+name: Check Native Kubernetes
+
+on:
+  pull_request:
+    branches:
+      - master
+      - development
+      - k8s-new
+    paths:
+      - ".github/workflows/k8s-check.yaml"
+      - "MANIFEST.in"
+      - "development.env"
+      - "requirements.txt"
+      - "setup.py"
+      - "docker_images/multiarch/**"
+      - "seedemu/compiler/Docker.py"
+      - "seedemu/compiler/kubernetes.py"
+      - "seedemu/compiler/__init__.py"
+      - "seedemu/k8sTools/**"
+      - "examples/internet/b61_k8s_compile/**"
+      - "tests/k8s/**"
+  workflow_dispatch:
+    inputs:
+      build_images:
+        description: "Build and push native K8s workload images to a local registry"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.10"
+  K8S_NAMESPACE: seedemu-k8s-b61
+  K8S_IMAGE_REGISTRY_PREFIX: seedemu
+  K8S_OUTPUT_DIR: /tmp/seedemu-k8s-output
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  k8s-static:
+    name: K8s Static
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the source repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install static-check dependencies
+        run: python -m pip install PyYAML
+      - name: Validate K8s source files
+        run: python3 tests/k8s/validateK8sStatic.py
+
+  k8s-compile:
+    name: K8s Compile
+    runs-on: ubuntu-latest
+    needs: k8s-static
+    timeout-minutes: 20
+    steps:
+      - name: Check out the source repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: "requirements.txt"
+      - name: Install compile dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Compile native K8s example
+        run: |
+          source development.env
+          python3 examples/internet/b61_k8s_compile/mini_internet_k8s.py \
+            --output-dir "${K8S_OUTPUT_DIR}"
+      - name: Validate native K8s output
+        run: |
+          python3 tests/k8s/validateNativeK8sOutput.py \
+            --output-dir "${K8S_OUTPUT_DIR}" \
+            --expected-namespace "${K8S_NAMESPACE}" \
+            --image-registry-prefix "${K8S_IMAGE_REGISTRY_PREFIX}"
+      - name: Archive native K8s compile output
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-k8s-output
+          path: ${{ env.K8S_OUTPUT_DIR }}
+          if-no-files-found: error
+
+  k8s-build-images:
+    name: K8s Build Images
+    runs-on: ubuntu-latest
+    needs: k8s-compile
+    timeout-minutes: 45
+    if: ${{ github.event_name == 'pull_request' || github.event.inputs.build_images == 'true' }}
+    steps:
+      - name: Check out the source repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install build helper dependencies
+        run: python -m pip install PyYAML
+      - name: Check Docker buildx
+        run: |
+          docker version
+          docker buildx version
+      - name: Download native K8s compile output
+        uses: actions/download-artifact@v4
+        with:
+          name: native-k8s-output
+          path: ${{ env.K8S_OUTPUT_DIR }}
+      - name: Build and push images to local registry
+        run: |
+          bash tests/k8s/buildNativeK8sImages.sh \
+            --output-dir "${K8S_OUTPUT_DIR}" \
+            --registry-prefix 127.0.0.1:5000 \
+            --image-registry-prefix "${K8S_IMAGE_REGISTRY_PREFIX}"
