@@ -106,17 +106,28 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install build helper dependencies
-        run: python -m pip install PyYAML
+          cache: "pip"
+          cache-dependency-path: "requirements.txt"
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
       - name: Check Docker buildx
         run: |
           docker version
           docker buildx version
-      - name: Download native K8s compile output
-        uses: actions/download-artifact@v4
-        with:
-          name: native-k8s-output
-          path: ${{ env.K8S_OUTPUT_DIR }}
+      - name: Compile native K8s example for image build
+        run: |
+          rm -rf "${K8S_OUTPUT_DIR}"
+          source development.env
+          python3 examples/internet/b61_k8s_compile/mini_internet_k8s.py \
+            --output-dir "${K8S_OUTPUT_DIR}"
+      - name: Validate native K8s build output
+        run: |
+          python3 tests/k8s/validateNativeK8sOutput.py \
+            --output-dir "${K8S_OUTPUT_DIR}" \
+            --expected-namespace "${K8S_NAMESPACE}" \
+            --image-registry-prefix "${K8S_IMAGE_REGISTRY_PREFIX}"
       - name: Build and push images to local registry
         run: |
           bash tests/k8s/buildNativeK8sImages.sh \

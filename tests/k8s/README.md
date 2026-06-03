@@ -17,6 +17,8 @@ The workflow has three jobs:
   Kube-OVN manifests plus `images.yaml`.
 - `K8s Build Images`: builds every image listed in `images.yaml`, pushes to a
   temporary local registry, then pulls the pushed images back for verification.
+  This job recompiles the B61 output in its own runner so generated
+  `base_images/` contexts are present before Docker builds start.
 
 These jobs do not create KVM VMs, install K3s, or apply Kubernetes resources.
 The destructive KVM/K3s E2E plan is documented separately in
