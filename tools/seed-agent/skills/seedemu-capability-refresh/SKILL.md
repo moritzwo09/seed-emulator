@@ -1,6 +1,6 @@
 ---
 name: seedemu-capability-refresh
-description: Use before any SeedEmu paper-search or paper-fit assessment to inspect the local SeedEmu repository, refresh the SeedEmu capability map, and update agent/seedemu-context.md with current services, layers, examples, deployment modes, limitations, and evidence paths.
+description: Use before any SeedEmu paper-search or paper-fit assessment to inspect the local SeedEmu repository, refresh the SeedEmu capability map, and update ../../knowledge/capability-map.md with current services, layers, examples, deployment modes, limitations, and evidence paths.
 ---
 
 # SeedEmu Capability Refresh
@@ -13,9 +13,9 @@ enough to read every round.
 
 ## Required Inputs
 
-- Harness root: `tools/seedemu-paper-researcher`
-- SeedEmu repository root: usually `../..` from the harness root
-- Capability cache: `agent/seedemu-context.md`
+- Toolkit root: `tools/seed-agent`
+- SeedEmu repository root: the directory holding `seedemu/`, `examples/`, and `tools/`
+- Capability cache: `../../knowledge/capability-map.md`
 
 ## When To Run
 
@@ -26,7 +26,7 @@ blueprint.
 
 ## Refresh Workflow
 
-1. Read `agent/seedemu-context.md` to understand the current capability map.
+1. Read `../../knowledge/capability-map.md` to understand the current capability map.
 2. Inspect the repository at a high level:
    - list top-level directories;
    - list docs, examples, services, layers, components, compilers, tests, and tool directories;
@@ -51,14 +51,14 @@ blueprint.
    - stale path;
    - weak or overbroad evidence;
    - capability that matters for the current paper-search theme.
-5. Update `agent/seedemu-context.md` when the refresh finds material changes or
+5. Update `../../knowledge/capability-map.md` when the refresh finds material changes or
    missing evidence. Keep entries concise and evidence-backed.
 6. If no material update is needed, keep the file unchanged and mention the
    refresh result in the paper-search response or research state.
 
 ## Evidence Requirements
 
-Every capability entry added or changed in `agent/seedemu-context.md` should
+Every capability entry added or changed in `../../knowledge/capability-map.md` should
 include:
 
 - category;

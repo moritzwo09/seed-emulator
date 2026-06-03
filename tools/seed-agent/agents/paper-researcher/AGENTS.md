@@ -7,11 +7,17 @@ cheaper with SeedEmu.
 The harness is intentionally small. It contains:
 
 - `AGENTS.md`: project-level operating contract.
-- `skills/seedemu-capability-refresh/SKILL.md`: mandatory SeedEmu capability refresh workflow.
-- `skills/seedemu-paper-search/SKILL.md`: reusable research workflow.
-- `agent/seedemu-context.md`: static SeedEmu capability context and evidence map.
-- `agent/research-state-template.md`: template for multi-round search state.
-- `agent/paper-evaluation-template.md`: template for detailed candidate assessment.
+- `paper-fit-guide.md`: paper-reproduction matching heuristics and the paper-fit guide.
+- `../../skills/seedemu-capability-refresh/SKILL.md`: mandatory SeedEmu capability refresh workflow.
+- `../../skills/seedemu-paper-search/SKILL.md`: reusable research workflow.
+- `../../knowledge/capability-map.md`: static SeedEmu capability context and evidence map.
+- `templates/research-state-template.md`: template for multi-round search state.
+- `templates/paper-evaluation-template.md`: template for detailed candidate assessment.
+
+This agent lives inside the broader `tools/seed-agent/` toolkit. For project-wide design
+context it shares with every other agent and skill, see
+[`../../PRINCIPLES.md`](../../PRINCIPLES.md), [`../../knowledge/architecture.md`](../../knowledge/architecture.md),
+and [`../../README.md`](../../README.md).
 
 There is no application runtime. The main artifact is the research process and
 the evidence-backed reports produced from it.
@@ -37,12 +43,12 @@ backed assessment with concrete SeedEmu experiment blueprints.
 
 Always start from these local inputs:
 
-- `agent/seedemu-context.md`: compact summary of SeedEmu capabilities, examples, limits, and evidence paths.
-- `skills/seedemu-capability-refresh/SKILL.md`: workflow for inspecting the repository and updating SeedEmu capability context before paper search.
-- `skills/seedemu-paper-search/SKILL.md`: workflow for paper discovery and feasibility assessment.
-- `agent/research-state-template.md`: structure for preserving candidate status, evidence gaps, and next actions across rounds.
-- `agent/paper-evaluation-template.md`: structure for deep evaluation of a serious paper candidate.
-- The SeedEmu repository root, usually `../..` from this harness directory, when deeper verification is needed.
+- `../../knowledge/capability-map.md`: compact summary of SeedEmu capabilities, examples, limits, and evidence paths.
+- `../../skills/seedemu-capability-refresh/SKILL.md`: workflow for inspecting the repository and updating SeedEmu capability context before paper search.
+- `../../skills/seedemu-paper-search/SKILL.md`: workflow for paper discovery and feasibility assessment.
+- `templates/research-state-template.md`: structure for preserving candidate status, evidence gaps, and next actions across rounds.
+- `templates/paper-evaluation-template.md`: structure for deep evaluation of a serious paper candidate.
+- The SeedEmu repository root, when deeper verification is needed.
 
 Paper inputs may come from:
 
@@ -57,16 +63,16 @@ provided in the conversation, inspect it before making a high-confidence claim.
 
 ## SeedEmu Context Policy
 
-`agent/seedemu-context.md` is a cached context document. It exists to make
+`../../knowledge/capability-map.md` is a cached context document. It exists to make
 SeedEmu capabilities easy to reuse across research rounds, but it must be
 refreshed against the local repository before paper search.
 
 Use it as the first pass, but do not treat it as complete truth. Before any
 paper discovery, paper ranking, or paper-fit assessment, run the workflow in
-`skills/seedemu-capability-refresh/SKILL.md`.
+`../../skills/seedemu-capability-refresh/SKILL.md`.
 
 The refresh pass should inspect the local SeedEmu repository, compare current
-repository evidence with `agent/seedemu-context.md`, and update the context when
+repository evidence with `../../knowledge/capability-map.md`, and update the context when
 new or changed capabilities, examples, paths, limitations, or evidence are
 found. If no material update is needed, keep the context file unchanged and
 record that the refresh was performed in the research response or state file.
@@ -82,7 +88,7 @@ To update it:
 
 1. Inspect the local SeedEmu repository directly.
 2. Read the relevant docs, examples, source files, tests, and demo materials.
-3. Edit `agent/seedemu-context.md` with concise capability summaries, evidence paths, and limitations.
+3. Edit `../../knowledge/capability-map.md` with concise capability summaries, evidence paths, and limitations.
 4. Preserve its role as a compact agent-readable context document, not a full manual.
 
 Do not modify SeedEmu files outside this harness directory unless the user explicitly asks.
@@ -94,8 +100,8 @@ with a broad theme, become narrower after several candidate lists, and end with
 a small set of papers plus concrete SeedEmu reproduction plans.
 
 For broad or multi-round work, create or update a state file from
-`agent/research-state-template.md`. Use the path
-`agent/runs/<topic-slug>/research-state.md` for task-local state. The `runs`
+`templates/research-state-template.md`. Use the path
+`runs/<topic-slug>/research-state.md` for task-local state. The `runs`
 directory is intentionally ignored by version control so the harness stays
 small while active research can still persist between turns.
 
@@ -108,7 +114,7 @@ The state file should preserve:
 - reasons for rejecting or downgrading papers;
 - unresolved questions and the best next action.
 
-Use `agent/paper-evaluation-template.md` for papers that are likely to enter the
+Use `templates/paper-evaluation-template.md` for papers that are likely to enter the
 shortlist or need careful feasibility judgment. A detailed evaluation should
 make it obvious whether the paper is a direct SeedEmu fit, a good top-layer
 extension opportunity, or a poor match.
@@ -169,7 +175,7 @@ Paper-side evidence can come from:
 
 SeedEmu-side evidence can come from:
 
-- `agent/seedemu-context.md`;
+- `../../knowledge/capability-map.md`;
 - SeedEmu docs;
 - SeedEmu examples;
 - SeedEmu services, layers, compilers, or components;
@@ -289,7 +295,7 @@ as poor fit or require a defensive/sanitized variant.
 
 ## Updating The Static Context
 
-When updating `agent/seedemu-context.md`, keep the document compact and useful.
+When updating `../../knowledge/capability-map.md`, keep the document compact and useful.
 
 Each capability section should include:
 

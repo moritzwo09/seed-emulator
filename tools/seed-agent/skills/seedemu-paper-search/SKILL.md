@@ -10,26 +10,26 @@ description: Use when researching academic papers that could be reproduced, eval
 Before assessing papers, read:
 
 - `AGENTS.md`
-- `agent/seedemu-context.md`
-- `skills/seedemu-capability-refresh/SKILL.md`
+- `../../knowledge/capability-map.md`
+- `../seedemu-capability-refresh/SKILL.md`
 
 Use these optional templates when the task is broad, multi-round, or likely to
 produce a shortlist:
 
-- `agent/research-state-template.md`: persistent state for search rounds and decisions.
-- `agent/paper-evaluation-template.md`: detailed assessment for a serious candidate.
+- `../../agents/paper-researcher/templates/research-state-template.md`: persistent state for search rounds and decisions.
+- `../../agents/paper-researcher/templates/paper-evaluation-template.md`: detailed assessment for a serious candidate.
 
 Before searching for papers, run the `seedemu-capability-refresh` workflow. This
 means inspecting the local SeedEmu repository, comparing repository evidence
-against `agent/seedemu-context.md`, and updating the context when capabilities,
+against `../../knowledge/capability-map.md`, and updating the context when capabilities,
 examples, paths, limitations, or evidence are missing or stale.
 
-If `agent/seedemu-context.md` is still too thin for the current paper class
+If `../../knowledge/capability-map.md` is still too thin for the current paper class
 after that refresh, inspect the repository again before making strong claims:
 
-1. Inspect the local SeedEmu repository root, usually `../..` from this harness directory.
+1. Inspect the local SeedEmu repository root.
 2. Read relevant docs, examples, services, layers, and tests.
-3. Edit `agent/seedemu-context.md` with updated capability summaries, limitations, and evidence paths.
+3. Edit `../../knowledge/capability-map.md` with updated capability summaries, limitations, and evidence paths.
 
 ## Operating Mode
 
@@ -37,8 +37,8 @@ Run the search as an iterative research process, not as a static keyword match.
 Carry forward state, explain why candidates move up or down, and keep the next
 round focused on the most useful uncertainty.
 
-Create or update `agent/runs/<topic-slug>/research-state.md` from
-`agent/research-state-template.md` when any of these are true:
+Create or update `../../agents/paper-researcher/runs/<topic-slug>/research-state.md` from
+`../../agents/paper-researcher/templates/research-state-template.md` when any of these are true:
 
 - the user asks for a broad search;
 - the task will span multiple rounds;
@@ -57,7 +57,7 @@ Use candidate statuses consistently:
 
 ## Search Workflow
 
-1. Refresh SeedEmu capability context using `skills/seedemu-capability-refresh/SKILL.md`.
+1. Refresh SeedEmu capability context using `../seedemu-capability-refresh/SKILL.md`.
 2. Clarify the research brief only if the missing preference changes the search space.
 3. Seed the search from several angles:
    - venue and year: S&P, USENIX Security, CCS, NDSS, SOSP, OSDI, EuroSys, ATC, NSDI, SIGCOMM, IMC, CoNEXT, HotNets;
@@ -73,7 +73,7 @@ Use candidate statuses consistently:
    - metrics and validation method;
    - artifact or replication availability;
    - real-world cost, safety, ethics, or repeatability barriers.
-6. Map requirements to SeedEmu capabilities from the refreshed `agent/seedemu-context.md`.
+6. Map requirements to SeedEmu capabilities from the refreshed `../../knowledge/capability-map.md`.
 7. Inspect the SeedEmu repository directly when context evidence is insufficient.
 8. Estimate feasibility:
    - `existing`;
@@ -107,7 +107,7 @@ Do not recommend a paper as `strong`, `shortlisted`, or `final` unless both are
 available:
 
 - Paper evidence: a concise quote or close paraphrase from metadata, abstract, full text, evaluation section, artifact README, dataset description, or replication instructions.
-- SeedEmu evidence: a capability, example, service, layer, component, compiler, doc path, or test from `agent/seedemu-context.md` or direct repo inspection.
+- SeedEmu evidence: a capability, example, service, layer, component, compiler, doc path, or test from `../../knowledge/capability-map.md` or direct repo inspection.
 
 If evidence is partial, label the paper as `tentative` and state what must be
 checked next. If either side cannot be supported after inspection, reject or
@@ -115,7 +115,7 @@ downgrade the candidate.
 
 ## Detailed Evaluation
 
-Use `agent/paper-evaluation-template.md` for papers that are likely to enter the
+Use `../../agents/paper-researcher/templates/paper-evaluation-template.md` for papers that are likely to enter the
 shortlist or require careful feasibility judgment.
 
 Each detailed evaluation should distinguish:
