@@ -78,7 +78,7 @@ buildImageWithBuildx() {
         return 0
     fi
 
-    if grep -Eq 'parent snapshot .* does not exist|failed to prepare extraction snapshot|failed to solve' "${log_file}"; then
+    if grep -Eq 'parent snapshot .* does not exist|failed to prepare extraction snapshot' "${log_file}"; then
         echo "[k8s_build] buildx export/cache failure while building ${image}; pruning buildx cache and retrying once" >&2
         docker buildx prune -af >/dev/null 2>&1 || true
         rm -f "${log_file}"
@@ -90,12 +90,67 @@ buildImageWithBuildx() {
     return 1
 }
 
-if [ -d "base_images" ]; then
+firstFromImage() {
+    # Args:
+    #   $1: Dockerfile path.
+    # Prints the first FROM image reference, handling optional --platform.
+    awk '
+        toupper($1) == "FROM" {
+            if ($2 ~ /^--platform=/) {
+                print $3
+            } else {
+                print $2
+            }
+            exit
+        }
+    ' "$1"
+}
+
+isCompilerBaseTag() {
+    # Args:
+    #   $1: image reference to check.
+    # Returns true for Docker compiler hash tags used in generated FROM lines.
+    [[ "$1" =~ ^[0-9a-f]{32}(:latest)?$ ]]
+}
+
+ensureCompilerBaseImages() {
+    # Build every hash-tagged base image required by generated node Dockerfiles.
+    # A missing base_images/<hash>/Dockerfile means the compiler output is
+    # incomplete; without this check Docker would try pulling library/<hash>.
+    local tmpfile
+    local dockerfile
+    local from_image
+    local base_tag
+    local context
+    local missing=0
+
+    tmpfile="$(mktemp)"
     while IFS= read -r dockerfile; do
-        base_tag="$(basename "$(dirname "${dockerfile}")")"
-        buildImageWithBuildx "${base_tag}" "$(dirname "${dockerfile}")"
-    done < <(find base_images -mindepth 2 -maxdepth 2 -name Dockerfile | sort)
-fi
+        from_image="$(firstFromImage "${dockerfile}")"
+        if isCompilerBaseTag "${from_image}"; then
+            printf '%s\n' "${from_image%:latest}" >> "${tmpfile}"
+        fi
+    done < <(find . -path './base_images/*' -prune -o -name Dockerfile -print | sort)
+
+    while IFS= read -r base_tag; do
+        [ -n "${base_tag}" ] || continue
+        context="base_images/${base_tag}"
+        if [ -f "${context}/Dockerfile" ]; then
+            buildImageWithBuildx "${base_tag}" "${context}"
+        elif docker image inspect "${base_tag}" >/dev/null 2>&1; then
+            continue
+        else
+            echo "Missing compiler base image context: ${context}/Dockerfile" >&2
+            echo "Re-run compile with the current NativeKubernetesCompiler so base_images/ is generated." >&2
+            missing=1
+        fi
+    done < <(sort -u "${tmpfile}")
+
+    rm -f "${tmpfile}"
+    return "${missing}"
+}
+
+ensureCompilerBaseImages
 
 python3 "${HELPER}" mapped-images \
     --images-yaml "${IMAGES_YAML}" \

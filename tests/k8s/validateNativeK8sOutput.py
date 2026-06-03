@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,7 @@ MANIFEST_NAME = "k8s.kube-ovn.yaml"
 IMAGES_NAME = "images.yaml"
 LEGACY_MANIFEST_NAME = "k8s.yaml"
 FORBIDDEN_TEXT = (str(Path("/home") / "lxl") + "/", str(Path("/home") / "lxl"))
+COMPILER_BASE_TAG_RE = re.compile(r"^[0-9a-f]{32}(?::latest)?$")
 
 
 def parseArgs() -> argparse.Namespace:
@@ -278,6 +280,47 @@ def validateImages(images: list[dict[str, str]], output_dir: Path, image_registr
     return image_names
 
 
+def firstFromImage(dockerfile: Path) -> str:
+    """Return the first FROM image reference in a Dockerfile.
+
+    Args:
+        dockerfile: Dockerfile path.
+    """
+    for line in dockerfile.read_text(encoding="utf-8").splitlines():
+        parts = line.strip().split()
+        if not parts or parts[0].upper() != "FROM":
+            continue
+        if len(parts) >= 3 and parts[1].startswith("--platform="):
+            return parts[2]
+        if len(parts) >= 2:
+            return parts[1]
+        fail(f"{dockerfile.relative_to(dockerfile.parent.parent)} has malformed FROM line")
+    fail(f"{dockerfile.relative_to(dockerfile.parent.parent)} lacks FROM line")
+
+
+def validateCompilerBaseImages(output_dir: Path) -> None:
+    """Validate that hash-tagged node Dockerfiles have staged base contexts.
+
+    Args:
+        output_dir: Compiler output directory.
+    """
+    required: set[str] = set()
+    for dockerfile in output_dir.rglob("Dockerfile"):
+        try:
+            dockerfile.relative_to(output_dir / "base_images")
+            continue
+        except ValueError:
+            pass
+        from_image = firstFromImage(dockerfile)
+        if COMPILER_BASE_TAG_RE.match(from_image):
+            required.add(from_image.removesuffix(":latest"))
+
+    for base_tag in sorted(required):
+        context = output_dir / "base_images" / base_tag / "Dockerfile"
+        if not context.is_file():
+            fail(f"missing base_images/{base_tag}/Dockerfile for generated FROM {base_tag}")
+
+
 def validateNoHostLocalText(output_dir: Path) -> None:
     """Reject host-local absolute paths in generated text artifacts.
 
@@ -321,6 +364,7 @@ def main() -> int:
     validateVpcAndSubnets(by_kind)
     validateNetworkAttachments(by_kind)
     validateDeployments(by_kind, args.expected_namespace, image_names)
+    validateCompilerBaseImages(output_dir)
     validateNoHostLocalText(output_dir)
 
     print(
