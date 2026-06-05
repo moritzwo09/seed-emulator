@@ -9,7 +9,7 @@ import sys
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[2]
+REPO_ROOT = SCRIPT_DIR.parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -20,7 +20,9 @@ from seedemu.services import WebService
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build the A00 simple AS example.")
+    parser = argparse.ArgumentParser(
+        description="Build a small SEED Emulator topology for TestRunner."
+    )
     parser.add_argument("legacy_platform", nargs="?", choices=["amd", "arm"])
     parser.add_argument("--platform", choices=["amd", "arm"])
     parser.add_argument("--output", default=str(SCRIPT_DIR / "output"))
@@ -45,12 +47,7 @@ def build_emulator() -> Emulator:
     ebgp = Ebgp()
     web = WebService()
 
-    ###############################################################################
-    # Create an Internet Exchange
     base.createInternetExchange(100)
-
-    ###############################################################################
-    # Create and set up AS150, AS151, and AS152
 
     for asn in [150, 151, 152]:
         current_as = base.createAutonomousSystem(asn)
@@ -70,35 +67,22 @@ def build_emulator() -> Emulator:
     return emu
 
 
-def run(
-    dumpfile=None,
-    output=None,
-    platform=Platform.AMD64,
-    override=True,
-    render=True,
-):
-    emu = build_emulator()
-    if dumpfile is not None:
-        emu.dump(dumpfile)
-        return
-
-    if render:
-        emu.render()
-
-    output_dir = Path(output or SCRIPT_DIR / "output").resolve()
-    output_dir.parent.mkdir(parents=True, exist_ok=True)
-    emu.compile(Docker(platform=platform), str(output_dir), override=override)
-
-
 def main() -> int:
     args = parse_args()
-    run(
-        dumpfile=args.dumpfile,
-        output=str(Path(args.output).resolve()),
-        platform=resolve_platform(args.platform),
-        override=args.override,
-        render=args.render,
-    )
+    emu = build_emulator()
+
+    if args.dumpfile:
+        emu.dump(args.dumpfile)
+        print("Saved sample emulator to {}".format(args.dumpfile))
+        return 0
+
+    if args.render:
+        emu.render()
+
+    output_dir = Path(args.output).resolve()
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    emu.compile(Docker(platform=resolve_platform(args.platform)), str(output_dir), override=args.override)
+    print("Generated sample SEED Emulator Docker output in {}".format(output_dir))
     return 0
 
 
