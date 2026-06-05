@@ -65,22 +65,27 @@ def main() -> int:
         {
             "name": "AS2 r100 has MPLS/LDP enabled on internal links",
             "service": "brdnode_2_r100",
-            "command": "grep -q '^net_100_101$' /mpls_ifaces.txt && grep -q '^net_100_105$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+            "command": "grep -q '^net_100_core_100_101$' /mpls_ifaces.txt && grep -q '^net_100_core_100_105$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
         },
         {
             "name": "AS2 r101 has MPLS/LDP enabled on internal links",
             "service": "brdnode_2_r101",
-            "command": "grep -q '^net_100_101$' /mpls_ifaces.txt && grep -q '^net_101_102$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+            "command": "grep -q '^net_core_100_101_101$' /mpls_ifaces.txt && grep -q '^net_101_core_101_102$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
         },
         {
             "name": "AS2 r102 has MPLS/LDP enabled on internal links",
             "service": "brdnode_2_r102",
-            "command": "grep -q '^net_101_102$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+            "command": "grep -q '^net_core_101_102_102$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
         },
         {
             "name": "AS2 r105 has MPLS/LDP enabled on internal links",
             "service": "brdnode_2_r105",
-            "command": "grep -q '^net_100_105$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+            "command": "grep -q '^net_core_100_105_105$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+        },
+        {
+            "name": "AS2 core router participates in MPLS/LDP only on internal links",
+            "service": "rnode_2_core_100_101",
+            "command": "grep -q '^net_100_core_100_101$' /mpls_ifaces.txt && grep -q '^net_core_100_101_101$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
         },
         {
             "name": "AS3 remains a non-MPLS transit AS",

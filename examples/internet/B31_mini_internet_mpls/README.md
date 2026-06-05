@@ -10,8 +10,9 @@ AS3, AS4, AS11, AS12, and all stub ASes keep the normal B00 routing behavior.
 ```
 
 AS2 is a good demonstration target because it is a tier-1 transit AS connected
-to `IX100`, `IX101`, `IX102`, and `IX105`. Its topology and peerings are copied
-from B00, and only its internal routing layer is changed.
+to `IX100`, `IX101`, `IX102`, and `IX105`. Its IX presence and peerings are
+copied from B00. Its internal links are changed to pass through non-edge core
+routers, so the MPLS layer has an internal provider backbone to configure.
 
 ## Host System Support
 
@@ -46,8 +47,8 @@ emu.addLayer(Ospf())
 ```
 
 The MPLS layer masks AS2 from the regular `Ibgp` and `Ospf` layers and installs
-MPLS/LDP/OSPF configuration on AS2's routers. Other ASes continue to use the
-normal B00 behavior.
+MPLS/LDP/OSPF configuration on AS2's border and core routers. Other ASes
+continue to use the normal B00 behavior.
 
 ## Standard Arguments
 
@@ -91,8 +92,8 @@ The full lifecycle can also be run with:
 python seedemu/testing/cli.py all examples/internet/B31_mini_internet_mpls/example.yaml --artifact-dir ci-artifacts/b31
 ```
 
-The readiness stage checks representative AS2 MPLS routers, unchanged non-MPLS
-transit routers, and stub hosts. The probe stage checks that reachability still
-works across the mini Internet. The custom `test_runtime.py` program additionally
-checks that AS2 routers have MPLS/LDP configuration on the expected internal
-links and that an AS3 router does not have MPLS configuration.
+The readiness stage checks representative AS2 MPLS border/core routers,
+unchanged non-MPLS transit routers, and stub hosts. The probe stage checks that
+reachability still works across the mini Internet. The custom `test_runtime.py`
+program additionally checks that AS2 routers have MPLS/LDP configuration on the
+expected internal links and that an AS3 router does not have MPLS configuration.

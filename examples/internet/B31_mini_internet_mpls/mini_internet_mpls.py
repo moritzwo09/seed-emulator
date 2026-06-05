@@ -38,6 +38,27 @@ def resolve_platform(name: str) -> Platform:
     return Platform.AMD64 if name == "amd" else Platform.ARM64
 
 
+def make_as2_mpls_transit(base: Base):
+    """Create AS2 with the same IX presence as B00 and MPLS-ready core links."""
+
+    as2 = base.createAutonomousSystem(2)
+    border_routers = {}
+    for ix in [100, 101, 102, 105]:
+        border_routers[ix] = as2.createRouter("r{}".format(ix))
+        border_routers[ix].joinNetwork("ix{}".format(ix))
+
+    for left, right in [(100, 101), (101, 102), (100, 105)]:
+        core = as2.createRouter("core_{}_{}".format(left, right))
+        left_net = "net_{}_core_{}_{}".format(left, left, right)
+        right_net = "net_core_{}_{}_{}".format(left, right, right)
+        as2.createNetwork(left_net)
+        as2.createNetwork(right_net)
+        border_routers[left].joinNetwork(left_net)
+        core.joinNetwork(left_net)
+        core.joinNetwork(right_net)
+        border_routers[right].joinNetwork(right_net)
+
+
 def build_emulator(hosts_per_as=2) -> Emulator:
     emu = Emulator()
     ebgp = Ebgp()
@@ -65,12 +86,7 @@ def build_emulator(hosts_per_as=2) -> Emulator:
     # Create Transit Autonomous Systems
 
     ## Tier 1 ASes
-    Makers.makeTransitAs(
-        base,
-        2,
-        [100, 101, 102, 105],
-        [(100, 101), (101, 102), (100, 105)],
-    )
+    make_as2_mpls_transit(base)
 
     Makers.makeTransitAs(
         base,
@@ -90,8 +106,8 @@ def build_emulator(hosts_per_as=2) -> Emulator:
     Makers.makeTransitAs(base, 11, [102, 105], [(102, 105)])
     Makers.makeTransitAs(base, 12, [101, 104], [(101, 104)])
 
-    # AS2 keeps the same topology and peerings as B00, but its internal routing
-    # is configured by the MPLS layer instead of the regular OSPF/iBGP layers.
+    # AS2 keeps the same IX presence and peerings as B00, but its internal
+    # routing is configured by the MPLS layer instead of regular OSPF/iBGP.
     mpls.enableOn(2)
 
     ###############################################################################
