@@ -239,6 +239,7 @@ jobs:
           pip install -r requirements.txt -r dev-requirements.txt -r tests/requirements.txt
 
       - name: Load MPLS kernel modules
+        id: mpls
         if: >-
           ${{
             matrix.example.requires_mpls &&
@@ -250,17 +251,39 @@ jobs:
             )
           }}
         run: |
+          set +e
           sudo modprobe mpls_router
           sudo modprobe mpls_iptunnel
           sudo modprobe mpls_gso
-          lsmod | grep '^mpls_'
-          test -d /proc/sys/net/mpls
+          if test -d /proc/sys/net/mpls && lsmod | grep -q '^mpls_router'; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            lsmod | grep '^mpls_'
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::MPLS kernel modules are not available on this runner. Skipping the MPLS runtime lifecycle for ${{ matrix.example.code }}. Use a self-hosted runner with mpls_router, mpls_iptunnel, and mpls_gso for full MPLS runtime testing."
+          fi
+
+      - name: Report skipped MPLS lifecycle
+        if: >-
+          ${{
+            matrix.example.requires_mpls &&
+            steps.mpls.outputs.available == 'false' &&
+            env.RUN_FULL_LIFECYCLE == 'true' &&
+            (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
+            (
+              (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+            )
+          }}
+        run: |
+          echo "Skipping ${{ matrix.example.code }} full lifecycle because this GitHub runner does not provide MPLS kernel modules."
 
       - name: Run selected example lifecycle
         if: >-
           ${{
             env.RUN_FULL_LIFECYCLE == 'true' &&
             (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
+            (!matrix.example.requires_mpls || steps.mpls.outputs.available == 'true') &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
               (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
@@ -278,6 +301,7 @@ jobs:
             always() &&
             env.RUN_FULL_LIFECYCLE == 'true' &&
             (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
+            (!matrix.example.requires_mpls || steps.mpls.outputs.available == 'true') &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
               (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
