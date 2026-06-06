@@ -48,3 +48,27 @@ python seedemu/testing/cli.py all examples/basic/A03a_out_to_real_world/example.
 The automatic tests avoid depending on live Internet availability. They check
 emulated reachability, Akamai real-world router configuration, and that OpenVPN
 remote access is not part of this example.
+
+## Manual Real-World Reachability Test
+
+The automatic CI tests do not require live Internet access. To manually verify
+that an emulated host can reach the outside world, start the compiled emulation
+and run:
+
+```sh
+python examples/basic/A03a_out_to_real_world/test_real_world_reachability.py
+```
+
+By default, the manual test runs from `hnode_151_web`. It checks IPv4 DNS
+resolution for `example.com`, fetches a deterministic Akamai address in
+`23.192.228.0/24`, and fetches `http://example.com/`.
+
+Useful options:
+
+```sh
+python examples/basic/A03a_out_to_real_world/test_real_world_reachability.py \
+    --compose-file examples/basic/A03a_out_to_real_world/output/docker-compose.yml \
+    --service hnode_152_web \
+    --target http://23.192.228.84/ \
+    --artifact-dir temp/a03a-manual
+```

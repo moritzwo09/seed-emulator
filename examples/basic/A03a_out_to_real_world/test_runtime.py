@@ -54,7 +54,7 @@ def main() -> int:
         {
             "name": "Akamai real-world router has service-network route setup",
             "service": "brdnode_20940_rw",
-            "command": "test -s /rw_configure_script && grep -q 'ip route add default' /rw_configure_script",
+            "command": "test -s /rw_configure_script && grep -q 'MASQUERADE' /rw_configure_script && grep -q 'sed -i' /rw_configure_script",
         },
         {
             "name": "OpenVPN remote access is absent from out-to-real-world example",
