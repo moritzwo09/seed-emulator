@@ -1,92 +1,136 @@
-# Real-world interaction
+# Real-World Interaction
 
 This example demonstrates two features related to the real world.
-The first feature allows outside machines to connect to the 
-emulator, so they can participate in the emulation. The way
-to achieve this is through VPN. 
 
-The second feature allows an emulation to include real-world 
-autonomous systems. A real-world AS included in the emulation
-will collect the real network prefixes from the real Internet,
-and announce them inside the emulator. Packets reaching this AS
-will exit the emulator and be routed to the real destination. 
-Responses from the outside will come back to this real-world AS
-and be routed to the final destination in the emulator.
+The first feature allows outside machines to connect to the emulator, so they
+can participate in the emulation. This is done with OpenVPN remote access.
 
+The second feature allows the emulation to include a real-world autonomous
+system. A real-world AS announces real-world prefixes inside the emulator, and
+packets reaching that AS can exit the emulator toward the real destination.
 
-## Import and Create Required Components
+## Topology
 
-Most of this part is the same as that in `01-transit-as`. The only difference is the following:
+The emulated topology has:
+
+- `AS2`: transit AS between `IX100` and `IX101`.
+- `AS151`: stub AS at `IX100`, with OpenVPN remote access enabled on `net0`.
+- `AS152`: stub AS at `IX101`, with OpenVPN remote access enabled on `net0`.
+- `AS20940`: Akamai real-world AS at `IX101`.
+
+`example.com` is commonly served from Akamai infrastructure, so this example
+uses Akamai to demonstrate real-world prefix injection. By default, the example
+uses a deterministic Akamai prefix related to `example.com`:
+
+```text
+23.192.228.0/24
+```
+
+This makes CI and classroom tests more stable than fetching live prefixes from
+the Internet every time. To fetch live prefixes for AS20940 instead, pass:
+
+```sh
+--live-prefixes
+```
+
+## OpenVPN Remote Access
+
+The OpenVPN remote access provider is created with:
 
 ```python
 ovpn = OpenVpnRemoteAccessProvider()
 ```
 
-This creates an OpenVPN remote access provider. A remote access provider contains the logic to enable remote access to a network. It takes the following options:
-
-- `startPort`: The starting port number to assign to the OpenVPN servers. Default to `65000`.
-- `naddrs`: Number of addresses to reserve from the network. Default to `8`.
-- `ovpnCa`: CA to use for the OpenVPN server. Default to `None` (uses bulletin CA).
-- `ovpnCert`: Server certificate to use for the OpenVPN server. Default to `None` (uses bulletin certificate).
-- `ovpnKey`: Server key to use for the OpenVPN server. Default to `None` (uses bulletin key).
-
-For details on how to connect to the OpenVPN server with bulletin CA/cert/key,
-see [misc/openvpn-remote-access](/misc/openvpn-remote-access).
-
-The way a remote access provider works is that the emulator 
-will provide the remote access provider with the followings:
-
-- The network to enable remote access on. 
-- A for-service bridging network: this network is not a part of the emulation. Instead, it was used by special services like this to communicate with the emulator host.
-- A bridging node: this node is not a part of emulation. It is a special node that will have access to both the for-service bridging network and the network to enable remote access on.
-
-Then, what a remote access provider usually does is:
-
-- Start a VPN server, listen for incoming connections on the for-service bridge network, so the emulator host can port-forward to the VPN server and allow hosts in the real world to connect.
-- Add the VPN server interface and the network to enable remote access on to the same bridge so that clients can access the network.
-
-In the OpenVPN access provider, besides the two steps above, also reserve some IP addresses (8 by default) for the client IP address pool.
-
-However, note that a remote access provider does not necessarily create a VPN server - they can also be a VPN client that connect to another emulator or just a regular Linux bridge, to connect to, say, a network created by some other virtualization software.
-
-
-## Enable Remote Access 
-
-To allow remote access on a network, we just need to call the enabling API:
+Remote access is enabled on a network by calling:
 
 ```python
-as151.createNetwork('net0').enableRemoteAccess(ovpn)
+as151.createNetwork("net0").enableRemoteAccess(ovpn)
 ```
 
-The `Network::enableRemoteAccess` call enables remote access to a network. `enableRemoteAccess` takes only one parameter, the remote access provider.
+The remote access provider creates an OpenVPN bridge node for the selected
+network. It listens on a service network so the emulator host can forward a UDP
+port to the VPN server. For details on how to connect to the OpenVPN server with
+the built-in CA/certificate/key, see:
 
+```text
+misc/openvpn-remote-access
+```
 
-## Create a Real-World Stub AS 
+## Real-World AS
 
-A real-world AS is an AS, so we will first create an AS:
+A real-world AS is still modeled as an autonomous system:
 
 ```python
-as11872 = base.createAutonomousSystem(11872)
+as20940 = base.createAutonomousSystem(20940)
 ```
 
-We will create a special router in this AS: 
+The special real-world router is created with:
 
 ```python
-as11872.createRealWorldRouter('rw')
-
+as20940.createRealWorldRouter(
+    "rw",
+    prefixes=["23.192.228.0/24"],
+).joinNetwork("ix101", "10.101.0.209")
 ```
 
-The `createRealWorldRouter` call takes three parameters:
+`createRealWorldRouter` accepts:
 
 - `name`: name of the node.
-- `hideHops`: enable hide hops feature. When `True`, the router will hide real world hops from traceroute. This works by setting TTL = 64 to all real world destinations on `POSTROUTING`. Default to `True`.
-- `prefixes`: list of prefix. Can be a list of prefixes or `None`. When set to `None`, the router will automatically fetch the list of prefixes announced by the autonomous system in the real world. Default to `None`.
+- `hideHops`: whether to hide real-world hops from traceroute.
+- `prefixes`: list of prefixes to announce. If `None`, prefixes are fetched
+  from the real world for that ASN.
 
+## Standard Arguments
 
-We will connect this autonomous system to an internet exchange. 
-Here, we picked `IX101`. We need to override the auto address assignment,
-as 11872 is out of the 2~254 range:
+The example accepts both the legacy platform argument and the newer named
+arguments:
 
-```python
-as11872.createRealWorldRouter('rw').joinNetwork('ix101', '10.101.0.118')
+```sh
+python examples/basic/A03_real_world/real_world.py amd
+python examples/basic/A03_real_world/real_world.py --platform amd --output examples/basic/A03_real_world/output
+python examples/basic/A03_real_world/real_world.py --dumpfile examples/basic/A03_real_world/real_world.bin
+python examples/basic/A03_real_world/real_world.py --live-prefixes
 ```
+
+Supported arguments:
+
+- `amd|arm`: optional legacy platform argument.
+- `--platform amd|arm`: named platform argument.
+- `--output PATH`: output folder for Docker compiler results.
+- `--dumpfile PATH`: save a serialized emulator instead of compiling Docker output.
+- `--live-prefixes`: fetch live AS20940 prefixes instead of using the stable
+  example prefix.
+- `--override` / `--no-override`: control whether existing output is replaced.
+- `--skip-render`: compile without calling `emu.render()` first.
+
+## TestRunner Lifecycle
+
+This example includes an `example.yaml` manifest for `seedemu.testing`. Run
+these commands from the repository root:
+
+```sh
+python seedemu/testing/cli.py clean examples/basic/A03_real_world/example.yaml
+python seedemu/testing/cli.py compile examples/basic/A03_real_world/example.yaml --artifact-dir ci-artifacts/a03
+python seedemu/testing/cli.py build examples/basic/A03_real_world/example.yaml --artifact-dir ci-artifacts/a03
+python seedemu/testing/cli.py up examples/basic/A03_real_world/example.yaml --artifact-dir ci-artifacts/a03
+python seedemu/testing/cli.py probe examples/basic/A03_real_world/example.yaml --artifact-dir ci-artifacts/a03
+python seedemu/testing/cli.py test examples/basic/A03_real_world/example.yaml --artifact-dir ci-artifacts/a03
+python seedemu/testing/cli.py down examples/basic/A03_real_world/example.yaml --artifact-dir ci-artifacts/a03
+```
+
+The full lifecycle can also be run with:
+
+```sh
+python seedemu/testing/cli.py all examples/basic/A03_real_world/example.yaml --artifact-dir ci-artifacts/a03
+```
+
+The automatic tests intentionally avoid depending on external Internet
+availability. They check:
+
+- AS151 can reach the AS152 web service through AS2.
+- AS152 can reach the AS151 web service through AS2.
+- The Akamai real-world router exists and has the deterministic prefix.
+- The real-world router has service-network route setup.
+
+Manual lab activities can additionally test real outbound traffic and OpenVPN
+client connectivity from outside the emulator.
