@@ -53,12 +53,12 @@ def main() -> int:
         {
             "name": "AS151 fetches AS152 web service",
             "service": "hnode_151_web",
-            "command": "curl -fsS http://10.152.0.71 >/dev/null",
+            "command": "curl -fsS http://10.152.0.79 >/dev/null",
         },
         {
             "name": "AS152 fetches AS151 web service",
             "service": "hnode_152_web",
-            "command": "curl -fsS http://10.151.0.71 >/dev/null",
+            "command": "curl -fsS http://10.151.0.79 >/dev/null",
         },
     ]
 

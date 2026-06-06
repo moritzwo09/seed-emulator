@@ -46,7 +46,7 @@ probes:
   - name: AS151 reaches AS152 through AS2
     type: exec
     service: hnode_151_web
-    command: curl -fsS http://10.152.0.71 >/dev/null
+    command: curl -fsS http://10.152.0.79 >/dev/null
     expect_exit: 0
     retries: 30
     interval: 5
@@ -54,7 +54,7 @@ probes:
   - name: AS152 reaches AS151 through AS2
     type: exec
     service: hnode_152_web
-    command: curl -fsS http://10.151.0.71 >/dev/null
+    command: curl -fsS http://10.151.0.79 >/dev/null
     expect_exit: 0
     retries: 30
     interval: 5
