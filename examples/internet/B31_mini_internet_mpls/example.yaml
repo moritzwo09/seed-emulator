@@ -36,6 +36,9 @@ runtime:
         - brdnode_2_r101
         - brdnode_2_r102
         - brdnode_2_r105
+        - rnode_2_core_100_101
+        - rnode_2_core_101_102
+        - rnode_2_core_100_105
         - brdnode_3_r103
         - brdnode_4_r104
         - brdnode_11_r102
