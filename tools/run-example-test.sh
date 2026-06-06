@@ -43,7 +43,7 @@ esac
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
-code=$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')
+code=$1
 shift
 
 command=all
@@ -58,7 +58,7 @@ fi
 
 matches=$(
     find "$repo_root/examples" -mindepth 2 -maxdepth 2 -type d \
-        \( -name "${code}" -o -name "${code}_*" \) | sort
+        \( -iname "${code}" -o -iname "${code}_*" \) | sort
 )
 
 if [ -z "$matches" ]; then

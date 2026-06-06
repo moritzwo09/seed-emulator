@@ -20,21 +20,12 @@ from seedemu.raps import OpenVpnRemoteAccessProvider
 from seedemu.services import WebService
 
 
-AKAMAI_ASN = 20940
-AKAMAI_EXAMPLE_PREFIXES = ["23.192.228.0/24"]
-
-
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build the A03 real-world interaction example.")
+    parser = argparse.ArgumentParser(description="Build the A03b from-real-world example.")
     parser.add_argument("legacy_platform", nargs="?", choices=["amd", "arm"])
     parser.add_argument("--platform", choices=["amd", "arm"])
     parser.add_argument("--output", default=str(SCRIPT_DIR / "output"))
     parser.add_argument("--dumpfile")
-    parser.add_argument(
-        "--live-prefixes",
-        action="store_true",
-        help="Fetch live prefixes for AS20940 instead of using deterministic example.com-related prefixes.",
-    )
     parser.add_argument("--override", dest="override", action="store_true", default=True)
     parser.add_argument("--no-override", dest="override", action="store_false")
     parser.add_argument("--skip-render", dest="render", action="store_false", default=True)
@@ -47,79 +38,47 @@ def resolve_platform(name: str) -> Platform:
     return Platform.AMD64 if name == "amd" else Platform.ARM64
 
 
-def build_emulator(use_live_prefixes=False) -> Emulator:
+def build_emulator() -> Emulator:
     emu = Emulator()
     base = Base()
-    routing = Routing()
     ebgp = Ebgp()
-    ibgp = Ibgp()
-    ospf = Ospf()
     web = WebService()
     ovpn = OpenVpnRemoteAccessProvider()
 
     base.createInternetExchange(100)
     base.createInternetExchange(101)
 
-    ###############################################################################
-    # Create a transit AS (AS2)
-
     as2 = base.createAutonomousSystem(2)
-
     as2.createNetwork("net0")
     as2.createNetwork("net1")
     as2.createNetwork("net2")
-
-    # Create 4 routers: r1 and r4 are BGP routers connected to Internet exchanges.
     as2.createRouter("r1").joinNetwork("ix100").joinNetwork("net0")
     as2.createRouter("r2").joinNetwork("net0").joinNetwork("net1")
     as2.createRouter("r3").joinNetwork("net1").joinNetwork("net2")
     as2.createRouter("r4").joinNetwork("net2").joinNetwork("ix101")
 
-    ###############################################################################
-    # Create AS151
-
     as151 = base.createAutonomousSystem(151)
     as151.createNetwork("net0").enableRemoteAccess(ovpn)
     as151.createRouter("router0").joinNetwork("net0").joinNetwork("ix100")
-
     as151.createHost("web").joinNetwork("net0")
     web.install("web151")
     emu.addBinding(Binding("web151", filter=Filter(asn=151, nodeName="web")))
 
-    ###############################################################################
-    # Create AS152
-
     as152 = base.createAutonomousSystem(152)
     as152.createNetwork("net0").enableRemoteAccess(ovpn)
     as152.createRouter("router0").joinNetwork("net0").joinNetwork("ix101")
-
     as152.createHost("web").joinNetwork("net0")
     web.install("web152")
     emu.addBinding(Binding("web152", filter=Filter(asn=152, nodeName="web")))
 
-    ###############################################################################
-    # Create an Akamai real-world AS.
-    #
-    # example.com is commonly served from Akamai infrastructure. By default, this
-    # example uses a deterministic Akamai prefix to keep testing stable. Lab users
-    # can pass --live-prefixes to fetch the live AS20940 prefix set.
-
-    as20940 = base.createAutonomousSystem(AKAMAI_ASN)
-    prefixes = None if use_live_prefixes else AKAMAI_EXAMPLE_PREFIXES
-    as20940.createRealWorldRouter("rw", prefixes=prefixes).joinNetwork("ix101", "10.101.0.209")
-
-    ###############################################################################
-    # BGP peering
-
     ebgp.addPrivatePeering(100, 2, 151, abRelationship=PeerRelationship.Provider)
     ebgp.addPrivatePeering(101, 2, 152, abRelationship=PeerRelationship.Provider)
-    ebgp.addPrivatePeering(101, 2, AKAMAI_ASN, abRelationship=PeerRelationship.Unfiltered)
 
     emu.addLayer(base)
-    emu.addLayer(routing)
+    emu.addLayer(Routing())
     emu.addLayer(ebgp)
-    emu.addLayer(ibgp)
-    emu.addLayer(ospf)
+    emu.addLayer(Ibgp())
+    emu.addLayer(Ospf())
     emu.addLayer(web)
     return emu
 
@@ -130,9 +89,8 @@ def run(
     platform=Platform.AMD64,
     override=True,
     render=True,
-    use_live_prefixes=False,
 ):
-    emu = build_emulator(use_live_prefixes=use_live_prefixes)
+    emu = build_emulator()
     if dumpfile is not None:
         emu.dump(dumpfile)
         return
@@ -153,7 +111,6 @@ def main() -> int:
         platform=resolve_platform(args.platform),
         override=args.override,
         render=args.render,
-        use_live_prefixes=args.live_prefixes,
     )
     return 0
 

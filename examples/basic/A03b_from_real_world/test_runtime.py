@@ -11,18 +11,7 @@ from typing import Dict, List
 
 def compose_exec(compose_file: Path, service: str, command: str, timeout: int = 45) -> Dict[str, object]:
     result = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "-f",
-            str(compose_file),
-            "exec",
-            "-T",
-            service,
-            "sh",
-            "-lc",
-            command,
-        ],
+        ["docker", "compose", "-f", str(compose_file), "exec", "-T", service, "sh", "-lc", command],
         cwd=str(compose_file.parent),
         text=True,
         capture_output=True,
@@ -36,6 +25,15 @@ def compose_exec(compose_file: Path, service: str, command: str, timeout: int = 
         "stdout": result.stdout[-1000:],
         "stderr": result.stderr[-1000:],
     }
+
+
+def find_openvpn_outputs(output_dir: Path) -> List[str]:
+    matches = []
+    for dockerfile in output_dir.glob("*/Dockerfile"):
+        text = dockerfile.read_text(encoding="utf-8", errors="replace")
+        if "/ovpn-server.conf" in text and "/ovpn_startup" in text:
+            matches.append(dockerfile.parent.name)
+    return sorted(matches)
 
 
 def main() -> int:
@@ -62,16 +60,6 @@ def main() -> int:
             "service": "hnode_152_web",
             "command": "curl -fsS http://10.151.0.71 >/dev/null",
         },
-        {
-            "name": "Akamai real-world router has deterministic example prefix",
-            "service": "brdnode_20940_rw",
-            "command": "grep -q '23.192.228.0/24' /etc/bird/bird.conf",
-        },
-        {
-            "name": "Akamai real-world router has service-network route setup",
-            "service": "brdnode_20940_rw",
-            "command": "test -s /rw_configure_script && grep -q 'ip route add default' /rw_configure_script",
-        },
     ]
 
     results: List[Dict[str, object]] = []
@@ -81,16 +69,45 @@ def main() -> int:
         result["status"] = "passed" if result["exit"] == 0 else "failed"
         results.append(result)
 
+    openvpn_outputs = find_openvpn_outputs(compose_file.parent)
+    results.append(
+        {
+            "name": "OpenVPN bridge nodes are generated",
+            "service": "<output>",
+            "command": "scan generated Dockerfiles for /ovpn-server.conf and /ovpn_startup",
+            "exit": 0 if len(openvpn_outputs) >= 2 else 1,
+            "stdout": ", ".join(openvpn_outputs),
+            "stderr": "",
+            "status": "passed" if len(openvpn_outputs) >= 2 else "failed",
+        }
+    )
+
+    real_world_outputs = [
+        path.parent.name
+        for path in compose_file.parent.glob("*/Dockerfile")
+        if "/rw_configure_script" in path.read_text(encoding="utf-8", errors="replace")
+    ]
+    results.append(
+        {
+            "name": "Real-world router is absent from from-real-world example",
+            "service": "<output>",
+            "command": "scan generated Dockerfiles for /rw_configure_script",
+            "exit": 0 if not real_world_outputs else 1,
+            "stdout": ", ".join(sorted(real_world_outputs)),
+            "stderr": "",
+            "status": "passed" if not real_world_outputs else "failed",
+        }
+    )
+
     summary = {
         "compose_file": str(compose_file),
         "results": results,
         "failures": [item["name"] for item in results if item["status"] == "failed"],
     }
-
     print(json.dumps(summary, indent=2, sort_keys=True))
 
     if artifact_dir:
-        path = Path(artifact_dir) / "a03-real-world-runtime-test.json"
+        path = Path(artifact_dir) / "a03b-runtime-test.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

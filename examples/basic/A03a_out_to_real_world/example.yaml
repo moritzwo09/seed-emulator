@@ -1,13 +1,12 @@
-id: basic-a03-real-world
-name: Real-World Interaction
-description: Demonstrates OpenVPN remote access and an Akamai real-world AS for outbound routing.
+id: basic-a03a-out-to-real-world
+name: Out To The Real World
+description: Demonstrates outbound real-world routing through Akamai AS20940.
 runner: internet
-script: real_world.py
+script: out_to_real_world.py
 platform: amd
 features:
   - ipv4-default
   - real-world-router
-  - openvpn-remote-access
   - web-service
   - ebgp-private-peering
   - ibgp
@@ -29,7 +28,7 @@ build:
 runtime:
   compose: output/docker-compose.yml
   readiness:
-    - name: A03 representative services are running
+    - name: A03a representative services are running
       type: compose-ps
       services:
         - brdnode_2_r1
@@ -62,6 +61,6 @@ probes:
     interval: 5
 
 test_programs:
-  - name: A03 real-world structural validation
+  - name: A03a real-world structural validation
     script: test_runtime.py
     timeout: 180
