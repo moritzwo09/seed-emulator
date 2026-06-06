@@ -59,6 +59,7 @@ go to this example folder, and run:
 sh test_real_world_reachability.sh
 ```
 
-The script runs one command from `hnode_151_web`: fetch `http://example.com/`
-over IPv4. If the command succeeds, the emulator can reach the real world from
-inside.
+The script runs one command from `hnode_151_web`: fetch
+`http://23.192.228.80/` over IPv4. This address is inside the deterministic
+Akamai prefix used by this example, so the check does not depend on DNS. If the
+command succeeds, the emulator can reach the real world from inside.
