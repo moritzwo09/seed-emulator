@@ -114,24 +114,31 @@ jobs:
         example:
           - code: A00
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A00_simple_as/example.yaml
           - code: A01
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A01_transit_as/example.yaml
           - code: A02
             category: basic
+            requires_mpls: true
             manifest: examples/basic/A02_transit_as_mpls/example.yaml
           - code: A03a
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A03a_out_to_real_world/example.yaml
           - code: A03b
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A03b_from_real_world/example.yaml
           - code: B00
             category: internet
+            requires_mpls: false
             manifest: examples/internet/B00_mini_internet/example.yaml
           - code: B31
             category: internet
+            requires_mpls: true
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
     steps:
       - name: Check out the source repository
@@ -190,24 +197,31 @@ jobs:
         example:
           - code: A00
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A00_simple_as/example.yaml
           - code: A01
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A01_transit_as/example.yaml
           - code: A02
             category: basic
+            requires_mpls: true
             manifest: examples/basic/A02_transit_as_mpls/example.yaml
           - code: A03a
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A03a_out_to_real_world/example.yaml
           - code: A03b
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A03b_from_real_world/example.yaml
           - code: B00
             category: internet
+            requires_mpls: false
             manifest: examples/internet/B00_mini_internet/example.yaml
           - code: B31
             category: internet
+            requires_mpls: true
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
     steps:
       - name: Check out the source repository
@@ -223,6 +237,24 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt -r dev-requirements.txt -r tests/requirements.txt
+
+      - name: Load MPLS kernel modules
+        if: >-
+          ${{
+            matrix.example.requires_mpls &&
+            env.RUN_FULL_LIFECYCLE == 'true' &&
+            (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
+            (
+              (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+            )
+          }}
+        run: |
+          sudo modprobe mpls_router
+          sudo modprobe mpls_iptunnel
+          sudo modprobe mpls_gso
+          lsmod | grep '^mpls_'
+          test -d /proc/sys/net/mpls
 
       - name: Run selected example lifecycle
         if: >-
