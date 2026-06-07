@@ -87,7 +87,7 @@ jobs:
             --expected-namespace "${K8S_NAMESPACE}" \
             --image-registry-prefix "${K8S_IMAGE_REGISTRY_PREFIX}"
       - name: Archive native K8s compile output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: native-k8s-output
           path: ${{ env.K8S_OUTPUT_DIR }}
