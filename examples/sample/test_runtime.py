@@ -2,89 +2,43 @@
 
 from __future__ import annotations
 
-import json
-import os
-import subprocess
-import sys
-from pathlib import Path
-from typing import Dict, List
-
-
-def run_compose_exec(compose_file: Path, service: str, command: str, timeout: int = 45) -> Dict[str, object]:
-    result = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "-f",
-            str(compose_file),
-            "exec",
-            "-T",
-            service,
-            "sh",
-            "-lc",
-            command,
-        ],
-        cwd=str(compose_file.parent),
-        text=True,
-        capture_output=True,
-        timeout=timeout,
-        check=False,
-    )
-    return {
-        "service": service,
-        "command": command,
-        "exit": result.returncode,
-        "stdout": result.stdout[-1000:],
-        "stderr": result.stderr[-1000:],
-    }
+from seedemu.testing import ComposeRuntimeTest
 
 
 def main() -> int:
-    example_dir = Path(os.environ.get("EXAMPLE_RUNNER_EXAMPLE_DIR", Path(__file__).parent)).resolve()
-    compose_file = Path(
-        os.environ.get("EXAMPLE_RUNNER_COMPOSE_FILE", example_dir / "output" / "docker-compose.yml")
-    ).resolve()
-    artifact_dir = os.environ.get("EXAMPLE_RUNNER_ARTIFACT_DIR")
+    test = ComposeRuntimeTest(__file__)
 
-    checks = [
-        {
-            "name": "AS151 fetches AS150 web service",
-            "service": "hnode_151_web",
-            "command": "curl -fsS http://10.150.0.71 >/dev/null",
-        },
-        {
-            "name": "AS152 fetches AS151 web service",
-            "service": "hnode_152_web",
-            "command": "curl -fsS http://10.151.0.71 >/dev/null",
-        },
-        {
-            "name": "AS150 reaches AS152 by ICMP",
-            "service": "hnode_150_web",
-            "command": "ping -c 3 10.152.0.71 >/dev/null",
-        },
-    ]
+    # Discover generated services by stable SEED Emulator labels. This keeps the
+    # test independent from Docker Compose service-name details.
+    web150 = test.require_service(150, "web")
+    web151 = test.require_service(151, "web")
+    web152 = test.require_service(152, "web")
+    test.require_service(150, "router0")
+    test.require_service(151, "router0")
+    test.require_service(152, "router0")
 
-    results: List[Dict[str, object]] = []
-    for check in checks:
-        result = run_compose_exec(compose_file, str(check["service"]), str(check["command"]))
-        result["name"] = check["name"]
-        result["status"] = "passed" if result["exit"] == 0 else "failed"
-        results.append(result)
+    if web150 and web151 and web152:
+        test.exec_check("AS150 web service is ready", web150, "curl -fsS http://127.0.0.1 >/dev/null")
+        test.exec_check("AS151 web service is ready", web151, "curl -fsS http://127.0.0.1 >/dev/null")
+        test.exec_check("AS152 web service is ready", web152, "curl -fsS http://127.0.0.1 >/dev/null")
+        test.exec_check(
+            "AS151 fetches AS150 web service",
+            web151,
+            "curl -fsS http://{} >/dev/null".format(web150.address),
+        )
+        test.exec_check(
+            "AS152 fetches AS151 web service",
+            web152,
+            "curl -fsS http://{} >/dev/null".format(web151.address),
+        )
+        test.exec_check(
+            "AS150 reaches AS152 by ICMP",
+            web150,
+            "ping -c 3 {} >/dev/null".format(web152.address),
+        )
 
-    summary = {
-        "compose_file": str(compose_file),
-        "results": results,
-        "failures": [item["name"] for item in results if item["status"] == "failed"],
-    }
-
-    print(json.dumps(summary, indent=2, sort_keys=True))
-
-    if artifact_dir:
-        path = Path(artifact_dir) / "sample-custom-runtime-test.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-    return 1 if summary["failures"] else 0
+    test.write_summary("sample-custom-runtime-test.json")
+    return test.exit_code()
 
 
 if __name__ == "__main__":

@@ -79,6 +79,7 @@ jobs:
             seedemu/testing/blockchain.py \
             seedemu/testing/satellite.py \
             seedemu/testing/registry.py \
+            seedemu/testing/runtime.py \
             seedemu/testing/cli.py \
             examples/basic/A00_simple_as/simple_as.py \
             examples/basic/A00_simple_as/test_runtime.py \

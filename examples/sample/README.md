@@ -82,9 +82,42 @@ Declarative probes are useful when the success condition is simple and should be
 visible directly in `example.yaml`.
 
 The test stage runs custom programs listed in `test_programs`. This sample uses
-`test_runtime.py` to perform runtime validation in Python. A custom test program
-is useful when the success condition needs loops, tables, richer parsing, or
-domain-specific logic that would make the YAML hard to read.
+`test_runtime.py` to demonstrate the standard custom runtime-test design.
+
+Custom runtime tests should use `ComposeRuntimeTest` instead of duplicating
+Docker Compose execution, YAML parsing, retry logic, artifact writing, or
+environment-variable handling:
+
+```python
+from seedemu.testing import ComposeRuntimeTest
+
+
+def main() -> int:
+    test = ComposeRuntimeTest(__file__)
+
+    web150 = test.require_service(150, "web")
+    web151 = test.require_service(151, "web")
+
+    if web150 and web151:
+        test.exec_check(
+            "AS151 fetches AS150 web service",
+            web151,
+            "curl -fsS http://{} >/dev/null".format(web150.address),
+        )
+
+    test.write_summary("sample-custom-runtime-test.json")
+    return test.exit_code()
+```
+
+Use `require_service()` for structural checks based on SEED Emulator Compose
+labels, and use `exec_check()` for runtime checks that should retry while
+services and routes converge. Keep the test program focused on the
+example-specific intent: which nodes should exist and which behavior should be
+verified.
+
+A custom test program is useful when the success condition needs dynamic service
+discovery, loops, tables, richer parsing, or domain-specific logic that would
+make the YAML hard to read.
 
 When the new `TestRunner` starts a test program, it provides these environment
 variables:
@@ -100,7 +133,8 @@ The runner also provides the older `EXAMPLE_RUNNER_*` names for compatibility
 with existing custom test programs.
 
 The custom test exits with `0` on success and nonzero on failure. Its stdout and
-stderr are captured under the artifact directory, and the runner also writes
+stderr are captured under the artifact directory, `ComposeRuntimeTest` writes
+the example-specific JSON summary, and the runner also writes
 `test-summary.json`.
 
 ## Notes
