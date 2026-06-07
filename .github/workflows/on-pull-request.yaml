@@ -84,6 +84,7 @@ jobs:
             examples/basic/A00_simple_as/simple_as.py \
             examples/basic/A00_simple_as/test_runtime.py \
             examples/basic/A01_transit_as/transit_as.py \
+            examples/basic/A01_transit_as/test_runtime.py \
             examples/basic/A02_transit_as_mpls/transit_as_mpls.py \
             examples/basic/A02_transit_as_mpls/test_runtime.py \
             examples/basic/A03a_out_to_real_world/out_to_real_world.py \

@@ -2,99 +2,33 @@
 
 from __future__ import annotations
 
-import json
-import os
-import subprocess
-from pathlib import Path
-from typing import Dict, List
-
-
-def compose_exec(compose_file: Path, service: str, command: str, timeout: int = 60) -> Dict[str, object]:
-    result = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "-f",
-            str(compose_file),
-            "exec",
-            "-T",
-            service,
-            "sh",
-            "-lc",
-            command,
-        ],
-        cwd=str(compose_file.parent),
-        text=True,
-        capture_output=True,
-        timeout=timeout,
-        check=False,
-    )
-    return {
-        "service": service,
-        "command": command,
-        "exit": result.returncode,
-        "stdout": result.stdout[-1000:],
-        "stderr": result.stderr[-1000:],
-    }
+from seedemu.testing import ComposeRuntimeTest
 
 
 def main() -> int:
-    example_dir = Path(
-        os.environ.get("TEST_RUNNER_EMULATION_DIR")
-        or os.environ.get("EXAMPLE_RUNNER_EXAMPLE_DIR")
-        or Path(__file__).parent
-    ).resolve()
-    compose_file = Path(
-        os.environ.get("TEST_RUNNER_COMPOSE_FILE")
-        or os.environ.get("EXAMPLE_RUNNER_COMPOSE_FILE")
-        or example_dir / "output" / "docker-compose.yml"
-    ).resolve()
-    artifact_dir = os.environ.get("TEST_RUNNER_ARTIFACT_DIR") or os.environ.get("EXAMPLE_RUNNER_ARTIFACT_DIR")
+    test = ComposeRuntimeTest(__file__)
 
-    checks = [
-        {
-            "name": "AS150 reaches AS152 across the mini Internet",
-            "service": "hnode_150_host_0",
-            "command": "ping -c 3 10.152.0.71 >/dev/null",
-        },
-        {
-            "name": "AS150 reaches AS160 through AS3",
-            "service": "hnode_150_host_0",
-            "command": "ping -c 3 10.160.0.71 >/dev/null",
-        },
-        {
-            "name": "AS171 reaches AS154 customized host",
-            "service": "hnode_171_host_0",
-            "command": "ping -c 3 10.154.0.129 >/dev/null",
-        },
-        {
-            "name": "AS154 customized host has the expected address",
-            "service": "hnode_154_host_new",
-            "command": "ip addr show net0 | grep -q '10.154.0.129'",
-        },
-    ]
+    host150 = test.require_service(150, "host_0")
+    host152 = test.require_service(152, "host_0")
+    host160 = test.require_service(160, "host_0")
+    host171 = test.require_service(171, "host_0")
+    host154_new = test.require_service(154, "host_new")
 
-    results: List[Dict[str, object]] = []
-    for check in checks:
-        result = compose_exec(compose_file, str(check["service"]), str(check["command"]))
-        result["name"] = check["name"]
-        result["status"] = "passed" if result["exit"] == 0 else "failed"
-        results.append(result)
+    if host150 and host152:
+        test.exec_check("AS150 reaches AS152 across the mini Internet", host150, "ping -c 3 {} >/dev/null".format(host152.address))
+    if host150 and host160:
+        test.exec_check("AS150 reaches AS160 through AS3", host150, "ping -c 3 {} >/dev/null".format(host160.address))
+    if host171 and host154_new:
+        test.exec_check("AS171 reaches AS154 customized host", host171, "ping -c 3 {} >/dev/null".format(host154_new.address))
+    if host154_new:
+        test.exec_check(
+            "AS154 customized host has the expected address",
+            host154_new,
+            "ip addr show net0 | grep -q '10.154.0.129'",
+        )
 
-    summary = {
-        "compose_file": str(compose_file),
-        "results": results,
-        "failures": [item["name"] for item in results if item["status"] == "failed"],
-    }
-
-    print(json.dumps(summary, indent=2, sort_keys=True))
-
-    if artifact_dir:
-        path = Path(artifact_dir) / "b00-runtime-test.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-    return 1 if summary["failures"] else 0
+    test.write_summary("b00-runtime-test.json")
+    return test.exit_code()
 
 
 if __name__ == "__main__":

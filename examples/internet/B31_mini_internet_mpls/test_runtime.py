@@ -2,119 +2,63 @@
 
 from __future__ import annotations
 
-import json
-import os
-import subprocess
-from pathlib import Path
-from typing import Dict, List
-
-
-def compose_exec(compose_file: Path, service: str, command: str, timeout: int = 60) -> Dict[str, object]:
-    result = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "-f",
-            str(compose_file),
-            "exec",
-            "-T",
-            service,
-            "sh",
-            "-lc",
-            command,
-        ],
-        cwd=str(compose_file.parent),
-        text=True,
-        capture_output=True,
-        timeout=timeout,
-        check=False,
-    )
-    return {
-        "service": service,
-        "command": command,
-        "exit": result.returncode,
-        "stdout": result.stdout[-1000:],
-        "stderr": result.stderr[-1000:],
-    }
+from seedemu.testing import ComposeRuntimeTest
 
 
 def main() -> int:
-    example_dir = Path(
-        os.environ.get("TEST_RUNNER_EMULATION_DIR")
-        or os.environ.get("EXAMPLE_RUNNER_EXAMPLE_DIR")
-        or Path(__file__).parent
-    ).resolve()
-    compose_file = Path(
-        os.environ.get("TEST_RUNNER_COMPOSE_FILE")
-        or os.environ.get("EXAMPLE_RUNNER_COMPOSE_FILE")
-        or example_dir / "output" / "docker-compose.yml"
-    ).resolve()
-    artifact_dir = os.environ.get("TEST_RUNNER_ARTIFACT_DIR") or os.environ.get("EXAMPLE_RUNNER_ARTIFACT_DIR")
+    test = ComposeRuntimeTest(__file__)
 
-    checks = [
-        {
-            "name": "AS150 reaches AS152 through AS2",
-            "service": "hnode_150_host_0",
-            "command": "ping -c 3 10.152.0.71 >/dev/null",
-        },
-        {
-            "name": "AS171 reaches AS154 customized host",
-            "service": "hnode_171_host_0",
-            "command": "ping -c 3 10.154.0.129 >/dev/null",
-        },
-        {
-            "name": "AS2 r100 has MPLS/LDP enabled on internal links",
-            "service": "brdnode_2_r100",
-            "command": "grep -q '^net_100_core_100_101$' /mpls_ifaces.txt && grep -q '^net_100_core_100_105$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
-        },
-        {
-            "name": "AS2 r101 has MPLS/LDP enabled on internal links",
-            "service": "brdnode_2_r101",
-            "command": "grep -q '^net_core_100_101_101$' /mpls_ifaces.txt && grep -q '^net_101_core_101_102$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
-        },
-        {
-            "name": "AS2 r102 has MPLS/LDP enabled on internal links",
-            "service": "brdnode_2_r102",
-            "command": "grep -q '^net_core_101_102_102$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
-        },
-        {
-            "name": "AS2 r105 has MPLS/LDP enabled on internal links",
-            "service": "brdnode_2_r105",
-            "command": "grep -q '^net_core_100_105_105$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
-        },
-        {
-            "name": "AS2 core router participates in MPLS/LDP only on internal links",
-            "service": "rnode_2_core_100_101",
-            "command": "grep -q '^net_100_core_100_101$' /mpls_ifaces.txt && grep -q '^net_core_100_101_101$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
-        },
-        {
-            "name": "AS3 remains a non-MPLS transit AS",
-            "service": "brdnode_3_r103",
-            "command": "test ! -e /mpls_ifaces.txt",
-        },
-    ]
+    host150 = test.require_service(150, "host_0")
+    host152 = test.require_service(152, "host_0")
+    host171 = test.require_service(171, "host_0")
+    host154_new = test.require_service(154, "host_new")
+    r100 = test.require_service(2, "r100")
+    r101 = test.require_service(2, "r101")
+    r102 = test.require_service(2, "r102")
+    r105 = test.require_service(2, "r105")
+    core_100_101 = test.require_service(2, "core_100_101")
+    as3_r103 = test.require_service(3, "r103")
 
-    results: List[Dict[str, object]] = []
-    for check in checks:
-        result = compose_exec(compose_file, str(check["service"]), str(check["command"]))
-        result["name"] = check["name"]
-        result["status"] = "passed" if result["exit"] == 0 else "failed"
-        results.append(result)
+    if host150 and host152:
+        test.exec_check("AS150 reaches AS152 through AS2", host150, "ping -c 3 {} >/dev/null".format(host152.address))
+    if host171 and host154_new:
+        test.exec_check("AS171 reaches AS154 customized host", host171, "ping -c 3 {} >/dev/null".format(host154_new.address))
 
-    summary = {
-        "compose_file": str(compose_file),
-        "results": results,
-        "failures": [item["name"] for item in results if item["status"] == "failed"],
-    }
+    if r100:
+        test.exec_check(
+            "AS2 r100 has MPLS/LDP enabled on internal links",
+            r100,
+            "grep -q '^net_100_core_100_101$' /mpls_ifaces.txt && grep -q '^net_100_core_100_105$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+        )
+    if r101:
+        test.exec_check(
+            "AS2 r101 has MPLS/LDP enabled on internal links",
+            r101,
+            "grep -q '^net_core_100_101_101$' /mpls_ifaces.txt && grep -q '^net_101_core_101_102$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+        )
+    if r102:
+        test.exec_check(
+            "AS2 r102 has MPLS/LDP enabled on internal links",
+            r102,
+            "grep -q '^net_core_101_102_102$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+        )
+    if r105:
+        test.exec_check(
+            "AS2 r105 has MPLS/LDP enabled on internal links",
+            r105,
+            "grep -q '^net_core_100_105_105$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+        )
+    if core_100_101:
+        test.exec_check(
+            "AS2 core router participates in MPLS/LDP only on internal links",
+            core_100_101,
+            "grep -q '^net_100_core_100_101$' /mpls_ifaces.txt && grep -q '^net_core_100_101_101$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf",
+        )
+    if as3_r103:
+        test.exec_check("AS3 remains a non-MPLS transit AS", as3_r103, "test ! -e /mpls_ifaces.txt")
 
-    print(json.dumps(summary, indent=2, sort_keys=True))
-
-    if artifact_dir:
-        path = Path(artifact_dir) / "b31-mpls-runtime-test.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-    return 1 if summary["failures"] else 0
+    test.write_summary("b31-mpls-runtime-test.json")
+    return test.exit_code()
 
 
 if __name__ == "__main__":

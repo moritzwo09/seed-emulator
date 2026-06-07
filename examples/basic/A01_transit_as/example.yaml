@@ -68,3 +68,8 @@ probes:
     count: 3
     retries: 30
     interval: 5
+
+test_programs:
+  - name: A01 transit AS runtime validation
+    script: test_runtime.py
+    timeout: 180
