@@ -58,10 +58,10 @@ jobs:
       contents: read
     steps:
       - name: Check out the source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
           cache: pip
@@ -79,10 +79,12 @@ jobs:
             seedemu/testing/blockchain.py \
             seedemu/testing/satellite.py \
             seedemu/testing/registry.py \
+            seedemu/testing/runtime.py \
             seedemu/testing/cli.py \
             examples/basic/A00_simple_as/simple_as.py \
             examples/basic/A00_simple_as/test_runtime.py \
             examples/basic/A01_transit_as/transit_as.py \
+            examples/basic/A01_transit_as/test_runtime.py \
             examples/basic/A02_transit_as_mpls/transit_as_mpls.py \
             examples/basic/A02_transit_as_mpls/test_runtime.py \
             examples/basic/A03a_out_to_real_world/out_to_real_world.py \
@@ -158,10 +160,10 @@ jobs:
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
     steps:
       - name: Check out the source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
           cache: pip
@@ -196,7 +198,7 @@ jobs:
               (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
             )
           }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: example-${{ matrix.example.code }}-compile-artifacts
           path: ci-artifacts/${{ matrix.example.code }}-compile
@@ -249,10 +251,10 @@ jobs:
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
     steps:
       - name: Check out the source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
           cache: pip
@@ -331,7 +333,7 @@ jobs:
               (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
             )
           }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: example-${{ matrix.example.code }}-lifecycle-artifacts
           path: ci-artifacts/${{ matrix.example.code }}

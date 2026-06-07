@@ -47,9 +47,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out the source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install static-check dependencies
@@ -64,9 +64,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out the source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
@@ -87,7 +87,7 @@ jobs:
             --expected-namespace "${K8S_NAMESPACE}" \
             --image-registry-prefix "${K8S_IMAGE_REGISTRY_PREFIX}"
       - name: Archive native K8s compile output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: native-k8s-output
           path: ${{ env.K8S_OUTPUT_DIR }}
@@ -101,9 +101,9 @@ jobs:
     if: ${{ github.event_name == 'pull_request' || github.event.inputs.build_images == 'true' }}
     steps:
       - name: Check out the source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
