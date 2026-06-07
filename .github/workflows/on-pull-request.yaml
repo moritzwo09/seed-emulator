@@ -58,10 +58,10 @@ jobs:
       contents: read
     steps:
       - name: Check out the source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
           cache: pip
@@ -160,10 +160,10 @@ jobs:
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
     steps:
       - name: Check out the source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
           cache: pip
@@ -251,10 +251,10 @@ jobs:
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
     steps:
       - name: Check out the source repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
           cache: pip
