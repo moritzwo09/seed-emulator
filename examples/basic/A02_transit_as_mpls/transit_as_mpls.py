@@ -15,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from seedemu.compiler import Docker, Platform
 from seedemu.core import Binding, Emulator, Filter
-from seedemu.layers import Base, Ebgp, Mpls, PeerRelationship, Routing
+from seedemu.layers import Base, Ebgp, Ibgp, Mpls, Ospf, PeerRelationship, Routing
 from seedemu.services import WebService
 
 
@@ -99,6 +99,8 @@ def build_emulator() -> Emulator:
     emu.addLayer(base)
     emu.addLayer(routing)
     emu.addLayer(ebgp)
+    emu.addLayer(Ibgp())
+    emu.addLayer(Ospf())
     emu.addLayer(mpls)
     emu.addLayer(web)
     return emu

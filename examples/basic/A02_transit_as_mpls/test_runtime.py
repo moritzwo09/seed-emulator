@@ -47,11 +47,17 @@ def check(compose_file: Path, name: str, service: str, command: str) -> Dict[str
 
 
 def main() -> int:
-    example_dir = Path(os.environ.get("EXAMPLE_RUNNER_EXAMPLE_DIR", Path(__file__).parent)).resolve()
-    compose_file = Path(
-        os.environ.get("EXAMPLE_RUNNER_COMPOSE_FILE", example_dir / "output" / "docker-compose.yml")
+    example_dir = Path(
+        os.environ.get("TEST_RUNNER_EMULATION_DIR")
+        or os.environ.get("EXAMPLE_RUNNER_EXAMPLE_DIR")
+        or Path(__file__).parent
     ).resolve()
-    artifact_dir = os.environ.get("EXAMPLE_RUNNER_ARTIFACT_DIR")
+    compose_file = Path(
+        os.environ.get("TEST_RUNNER_COMPOSE_FILE")
+        or os.environ.get("EXAMPLE_RUNNER_COMPOSE_FILE")
+        or example_dir / "output" / "docker-compose.yml"
+    ).resolve()
+    artifact_dir = os.environ.get("TEST_RUNNER_ARTIFACT_DIR") or os.environ.get("EXAMPLE_RUNNER_ARTIFACT_DIR")
 
     checks = [
         (

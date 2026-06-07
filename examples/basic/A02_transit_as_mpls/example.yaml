@@ -42,6 +42,22 @@ runtime:
       retries: 30
       interval: 2
 
+    - name: AS151 local web service is ready
+      type: exec
+      service: hnode_151_web
+      command: curl -fsS http://127.0.0.1 >/dev/null
+      expect_exit: 0
+      retries: 30
+      interval: 2
+
+    - name: AS152 local web service is ready
+      type: exec
+      service: hnode_152_web
+      command: curl -fsS http://127.0.0.1 >/dev/null
+      expect_exit: 0
+      retries: 30
+      interval: 2
+
 probes:
   - name: AS151 reaches AS152 web service through MPLS transit AS2
     type: exec

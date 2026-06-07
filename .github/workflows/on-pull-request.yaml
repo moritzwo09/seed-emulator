@@ -20,6 +20,8 @@ on:
           - A02
           - A03a
           - A03b
+          - A05
+          - A06
           - B00
           - B31
       run-basic-examples:
@@ -87,6 +89,10 @@ jobs:
             examples/basic/A03a_out_to_real_world/test_runtime.py \
             examples/basic/A03b_from_real_world/from_real_world.py \
             examples/basic/A03b_from_real_world/test_runtime.py \
+            examples/basic/A05_components/components.py \
+            examples/basic/A05_components/test_runtime.py \
+            examples/basic/A06_merge_emulation/merge_emulation.py \
+            examples/basic/A06_merge_emulation/test_runtime.py \
             examples/internet/B00_mini_internet/mini_internet.py \
             examples/internet/B00_mini_internet/test_runtime.py \
             examples/internet/B31_mini_internet_mpls/mini_internet_mpls.py \
@@ -99,6 +105,8 @@ jobs:
           python seedemu/testing/cli.py clean examples/basic/A02_transit_as_mpls/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A03a_out_to_real_world/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A03b_from_real_world/example.yaml
+          python seedemu/testing/cli.py clean examples/basic/A05_components/example.yaml
+          python seedemu/testing/cli.py clean examples/basic/A06_merge_emulation/example.yaml
           python seedemu/testing/cli.py clean examples/internet/B00_mini_internet/example.yaml
           python seedemu/testing/cli.py clean examples/internet/B31_mini_internet_mpls/example.yaml
 
@@ -114,24 +122,39 @@ jobs:
         example:
           - code: A00
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A00_simple_as/example.yaml
           - code: A01
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A01_transit_as/example.yaml
           - code: A02
             category: basic
+            requires_mpls: true
             manifest: examples/basic/A02_transit_as_mpls/example.yaml
           - code: A03a
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A03a_out_to_real_world/example.yaml
           - code: A03b
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A03b_from_real_world/example.yaml
+          - code: A05
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A05_components/example.yaml
+          - code: A06
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A06_merge_emulation/example.yaml
           - code: B00
             category: internet
+            requires_mpls: false
             manifest: examples/internet/B00_mini_internet/example.yaml
           - code: B31
             category: internet
+            requires_mpls: true
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
     steps:
       - name: Check out the source repository
@@ -190,24 +213,39 @@ jobs:
         example:
           - code: A00
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A00_simple_as/example.yaml
           - code: A01
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A01_transit_as/example.yaml
           - code: A02
             category: basic
+            requires_mpls: true
             manifest: examples/basic/A02_transit_as_mpls/example.yaml
           - code: A03a
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A03a_out_to_real_world/example.yaml
           - code: A03b
             category: basic
+            requires_mpls: false
             manifest: examples/basic/A03b_from_real_world/example.yaml
+          - code: A05
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A05_components/example.yaml
+          - code: A06
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A06_merge_emulation/example.yaml
           - code: B00
             category: internet
+            requires_mpls: false
             manifest: examples/internet/B00_mini_internet/example.yaml
           - code: B31
             category: internet
+            requires_mpls: true
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
     steps:
       - name: Check out the source repository
@@ -224,11 +262,52 @@ jobs:
         run: |
           pip install -r requirements.txt -r dev-requirements.txt -r tests/requirements.txt
 
+      - name: Load MPLS kernel modules
+        id: mpls
+        if: >-
+          ${{
+            matrix.example.requires_mpls &&
+            env.RUN_FULL_LIFECYCLE == 'true' &&
+            (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
+            (
+              (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+            )
+          }}
+        run: |
+          set +e
+          sudo modprobe mpls_router
+          sudo modprobe mpls_iptunnel
+          sudo modprobe mpls_gso
+          if test -d /proc/sys/net/mpls && lsmod | grep -q '^mpls_router'; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            lsmod | grep '^mpls_'
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::MPLS kernel modules are not available on this runner. Skipping the MPLS runtime lifecycle for ${{ matrix.example.code }}. Use a self-hosted runner with mpls_router, mpls_iptunnel, and mpls_gso for full MPLS runtime testing."
+          fi
+
+      - name: Report skipped MPLS lifecycle
+        if: >-
+          ${{
+            matrix.example.requires_mpls &&
+            steps.mpls.outputs.available == 'false' &&
+            env.RUN_FULL_LIFECYCLE == 'true' &&
+            (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
+            (
+              (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+            )
+          }}
+        run: |
+          echo "Skipping ${{ matrix.example.code }} full lifecycle because this GitHub runner does not provide MPLS kernel modules."
+
       - name: Run selected example lifecycle
         if: >-
           ${{
             env.RUN_FULL_LIFECYCLE == 'true' &&
             (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
+            (!matrix.example.requires_mpls || steps.mpls.outputs.available == 'true') &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
               (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
@@ -246,6 +325,7 @@ jobs:
             always() &&
             env.RUN_FULL_LIFECYCLE == 'true' &&
             (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
+            (!matrix.example.requires_mpls || steps.mpls.outputs.available == 'true') &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
               (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
