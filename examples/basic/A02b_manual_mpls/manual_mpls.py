@@ -106,18 +106,30 @@ def build_emulator() -> Emulator:
     base.createInternetExchange(103)
 
     as2 = base.createAutonomousSystem(2)
+    as2.createNetwork("net_e1_r1", prefix="10.2.101.0/24")
+    as2.createNetwork("net_e2_r2", prefix="10.2.102.0/24")
+    as2.createNetwork("net_e3_r3", prefix="10.2.103.0/24")
     as2.createNetwork("net12", prefix="10.2.12.0/24")
     as2.createNetwork("net23", prefix="10.2.23.0/24")
     as2.createNetwork("net31", prefix="10.2.31.0/24")
 
+    e1 = as2.createRouter("e1")
+    e1.joinNetwork("ix101", "10.101.0.2").joinNetwork("net_e1_r1", "10.2.101.1")
+
+    e2 = as2.createRouter("e2")
+    e2.joinNetwork("ix102", "10.102.0.2").joinNetwork("net_e2_r2", "10.2.102.1")
+
+    e3 = as2.createRouter("e3")
+    e3.joinNetwork("ix103", "10.103.0.2").joinNetwork("net_e3_r3", "10.2.103.1")
+
     r1 = as2.createRouter("r1")
-    r1.joinNetwork("ix101", "10.101.0.2").joinNetwork("net12", "10.2.12.1").joinNetwork("net31", "10.2.31.1")
+    r1.joinNetwork("net_e1_r1", "10.2.101.2").joinNetwork("net12", "10.2.12.1").joinNetwork("net31", "10.2.31.1")
 
     r2 = as2.createRouter("r2")
-    r2.joinNetwork("ix102", "10.102.0.2").joinNetwork("net12", "10.2.12.2").joinNetwork("net23", "10.2.23.2")
+    r2.joinNetwork("net_e2_r2", "10.2.102.2").joinNetwork("net12", "10.2.12.2").joinNetwork("net23", "10.2.23.2")
 
     r3 = as2.createRouter("r3")
-    r3.joinNetwork("ix103", "10.103.0.2").joinNetwork("net23", "10.2.23.3").joinNetwork("net31", "10.2.31.3")
+    r3.joinNetwork("net_e3_r3", "10.2.103.2").joinNetwork("net23", "10.2.23.3").joinNetwork("net31", "10.2.31.3")
 
     install_manual_mpls(r1, "r1")
     install_manual_mpls(r2, "r2")

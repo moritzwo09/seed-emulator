@@ -11,6 +11,9 @@ def main() -> int:
     web151 = test.require_service(151, "web")
     web152 = test.require_service(152, "web")
     web153 = test.require_service(153, "web")
+    e1 = test.require_service(2, "e1")
+    e2 = test.require_service(2, "e2")
+    e3 = test.require_service(2, "e3")
     r1 = test.require_service(2, "r1")
     r2 = test.require_service(2, "r2")
     r3 = test.require_service(2, "r3")
@@ -62,6 +65,14 @@ def main() -> int:
                 "{} does not use LDP".format(router.name),
                 router,
                 "test ! -e /etc/frr/frr.conf || ! grep -q 'mpls ldp' /etc/frr/frr.conf",
+            )
+
+    for router in (e1, e2, e3):
+        if router:
+            test.exec_check(
+                "{} is a BGP edge router, not a manual MPLS core router".format(router.name),
+                router,
+                "test ! -e /manual_mpls_setup.sh && test ! -e /mpls_ifaces.txt",
             )
 
     test.write_summary("a02b-manual-mpls-runtime-test.json")
