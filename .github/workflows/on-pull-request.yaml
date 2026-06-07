@@ -20,6 +20,8 @@ on:
           - A02
           - A03a
           - A03b
+          - A05
+          - A06
           - B00
           - B31
       run-basic-examples:
@@ -87,6 +89,10 @@ jobs:
             examples/basic/A03a_out_to_real_world/test_runtime.py \
             examples/basic/A03b_from_real_world/from_real_world.py \
             examples/basic/A03b_from_real_world/test_runtime.py \
+            examples/basic/A05_components/components.py \
+            examples/basic/A05_components/test_runtime.py \
+            examples/basic/A06_merge_emulation/merge_emulation.py \
+            examples/basic/A06_merge_emulation/test_runtime.py \
             examples/internet/B00_mini_internet/mini_internet.py \
             examples/internet/B00_mini_internet/test_runtime.py \
             examples/internet/B31_mini_internet_mpls/mini_internet_mpls.py \
@@ -99,6 +105,8 @@ jobs:
           python seedemu/testing/cli.py clean examples/basic/A02_transit_as_mpls/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A03a_out_to_real_world/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A03b_from_real_world/example.yaml
+          python seedemu/testing/cli.py clean examples/basic/A05_components/example.yaml
+          python seedemu/testing/cli.py clean examples/basic/A06_merge_emulation/example.yaml
           python seedemu/testing/cli.py clean examples/internet/B00_mini_internet/example.yaml
           python seedemu/testing/cli.py clean examples/internet/B31_mini_internet_mpls/example.yaml
 
@@ -132,6 +140,14 @@ jobs:
             category: basic
             requires_mpls: false
             manifest: examples/basic/A03b_from_real_world/example.yaml
+          - code: A05
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A05_components/example.yaml
+          - code: A06
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A06_merge_emulation/example.yaml
           - code: B00
             category: internet
             requires_mpls: false
@@ -215,6 +231,14 @@ jobs:
             category: basic
             requires_mpls: false
             manifest: examples/basic/A03b_from_real_world/example.yaml
+          - code: A05
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A05_components/example.yaml
+          - code: A06
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A06_merge_emulation/example.yaml
           - code: B00
             category: internet
             requires_mpls: false
