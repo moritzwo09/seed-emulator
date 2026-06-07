@@ -31,7 +31,7 @@ class CompileTest(ut.TestCase):
         basic_test_list = {
             "basic/A00_simple_as":                      (["simple_as.py"] , ["output"]),
             "basic/A01_transit_as" :                    (["transit_as.py"], ["output"]),
-            "basic/A02_transit_as_mpls" :               (["transit_as_mpls.py"], ["output"]),
+            "basic/A02a_transit_as_mpls" :              (["transit_as_mpls.py"], ["output"]),
             "basic/A03a_out_to_real_world" :            (["out_to_real_world.py"], ["output"]),
             "basic/A03b_from_real_world" :              (["from_real_world.py"], ["output"]),
             "basic/A04_visualization" :                 (["visualization.py"], ["output", "base_component.bin"]),

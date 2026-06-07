@@ -10,14 +10,15 @@ Usage:
 Examples:
   tools/run-example-test.sh A01
   tools/run-example-test.sh A01 compile
-  tools/run-example-test.sh A02 probe -- --artifact-dir ci-artifacts/a02-probe
+  tools/run-example-test.sh A02a probe -- --artifact-dir ci-artifacts/a02-probe
   tools/run-example-test.sh B02 all
 
 COMMAND defaults to all.
 Supported commands: clean, compile, build, up, readiness, probe, test, down, all.
 
-EXAMPLE_CODE is matched against example folder prefixes, such as A01, A02, B02,
-or D00. If a prefix matches multiple folders, use a more specific prefix.
+EXAMPLE_CODE is matched against example folder prefixes, such as A01, A02a,
+A02b, B02, or D00. If a prefix matches multiple folders, use a more specific
+prefix.
 EOF
 }
 

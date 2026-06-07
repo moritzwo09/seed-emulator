@@ -9,6 +9,6 @@ and runs the standardized test runner:
 
 ```sh
 tools/run-example-test.sh A01
-tools/run-example-test.sh A02 probe
+tools/run-example-test.sh A02a probe
 tools/run-example-test.sh B02 all
 ```

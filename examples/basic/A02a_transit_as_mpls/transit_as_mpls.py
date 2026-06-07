@@ -20,7 +20,7 @@ from seedemu.services import WebService
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build the A02 transit AS MPLS example.")
+    parser = argparse.ArgumentParser(description="Build the A02a transit AS MPLS-with-LDP example.")
     parser.add_argument("legacy_platform", nargs="?", choices=["amd", "arm"])
     parser.add_argument("--platform", choices=["amd", "arm"])
     parser.add_argument("--output", default=str(SCRIPT_DIR / "output"))

@@ -17,7 +17,7 @@ on:
           - all
           - A00
           - A01
-          - A02
+          - A02a
           - A03a
           - A03b
           - A05
@@ -85,8 +85,8 @@ jobs:
             examples/basic/A00_simple_as/test_runtime.py \
             examples/basic/A01_transit_as/transit_as.py \
             examples/basic/A01_transit_as/test_runtime.py \
-            examples/basic/A02_transit_as_mpls/transit_as_mpls.py \
-            examples/basic/A02_transit_as_mpls/test_runtime.py \
+            examples/basic/A02a_transit_as_mpls/transit_as_mpls.py \
+            examples/basic/A02a_transit_as_mpls/test_runtime.py \
             examples/basic/A03a_out_to_real_world/out_to_real_world.py \
             examples/basic/A03a_out_to_real_world/test_runtime.py \
             examples/basic/A03b_from_real_world/from_real_world.py \
@@ -104,7 +104,7 @@ jobs:
         run: |
           python seedemu/testing/cli.py clean examples/basic/A00_simple_as/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A01_transit_as/example.yaml
-          python seedemu/testing/cli.py clean examples/basic/A02_transit_as_mpls/example.yaml
+          python seedemu/testing/cli.py clean examples/basic/A02a_transit_as_mpls/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A03a_out_to_real_world/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A03b_from_real_world/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A05_components/example.yaml
@@ -130,10 +130,10 @@ jobs:
             category: basic
             requires_mpls: false
             manifest: examples/basic/A01_transit_as/example.yaml
-          - code: A02
+          - code: A02a
             category: basic
             requires_mpls: true
-            manifest: examples/basic/A02_transit_as_mpls/example.yaml
+            manifest: examples/basic/A02a_transit_as_mpls/example.yaml
           - code: A03a
             category: basic
             requires_mpls: false
@@ -221,10 +221,10 @@ jobs:
             category: basic
             requires_mpls: false
             manifest: examples/basic/A01_transit_as/example.yaml
-          - code: A02
+          - code: A02a
             category: basic
             requires_mpls: true
-            manifest: examples/basic/A02_transit_as_mpls/example.yaml
+            manifest: examples/basic/A02a_transit_as_mpls/example.yaml
           - code: A03a
             category: basic
             requires_mpls: false

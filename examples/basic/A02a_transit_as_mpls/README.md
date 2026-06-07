@@ -89,19 +89,19 @@ built, started, probed, tested, and stopped by `seedemu.testing`.
 Run these commands from the repository root:
 
 ```sh
-python seedemu/testing/cli.py clean examples/basic/A02_transit_as_mpls/example.yaml
-python seedemu/testing/cli.py compile examples/basic/A02_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
-python seedemu/testing/cli.py build examples/basic/A02_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
-python seedemu/testing/cli.py up examples/basic/A02_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
-python seedemu/testing/cli.py probe examples/basic/A02_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
-python seedemu/testing/cli.py test examples/basic/A02_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
-python seedemu/testing/cli.py down examples/basic/A02_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
+python seedemu/testing/cli.py clean examples/basic/A02a_transit_as_mpls/example.yaml
+python seedemu/testing/cli.py compile examples/basic/A02a_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
+python seedemu/testing/cli.py build examples/basic/A02a_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
+python seedemu/testing/cli.py up examples/basic/A02a_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
+python seedemu/testing/cli.py probe examples/basic/A02a_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
+python seedemu/testing/cli.py test examples/basic/A02a_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
+python seedemu/testing/cli.py down examples/basic/A02a_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
 ```
 
 The full lifecycle can also be run with:
 
 ```sh
-python seedemu/testing/cli.py all examples/basic/A02_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
+python seedemu/testing/cli.py all examples/basic/A02a_transit_as_mpls/example.yaml --artifact-dir ci-artifacts/a02-transit-as-mpls
 ```
 
 The manifest uses declarative probes for simple runtime checks:
