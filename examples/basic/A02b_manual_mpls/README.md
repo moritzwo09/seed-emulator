@@ -53,12 +53,12 @@ The labels are directional:
 
 | Traffic | Ingress Action | Egress Action |
 | --- | --- | --- |
-| AS151 to AS152 | `r1` pushes `200` to `r2` | `r2` pops `200`, forwards to `e2` at `10.2.102.253` |
-| AS151 to AS153 | `r1` pushes `210` to `r3` | `r3` pops `210`, forwards to `e3` at `10.2.103.253` |
-| AS152 to AS151 | `r2` pushes `300` to `r1` | `r1` pops `300`, forwards to `e1` at `10.2.101.253` |
-| AS152 to AS153 | `r2` pushes `310` to `r3` | `r3` pops `310`, forwards to `e3` at `10.2.103.253` |
-| AS153 to AS151 | `r3` pushes `400` to `r1` | `r1` pops `400`, forwards to `e1` at `10.2.101.253` |
-| AS153 to AS152 | `r3` pushes `410` to `r2` | `r2` pops `410`, forwards to `e2` at `10.2.102.253` |
+| AS151 to AS152 | `r1` pushes `200` to `r2` at `10.2.12.12` | `r2` pops `200`, forwards to `e2` at `10.2.102.11` |
+| AS151 to AS153 | `r1` pushes `210` to `r3` at `10.2.31.13` | `r3` pops `210`, forwards to `e3` at `10.2.103.11` |
+| AS152 to AS151 | `r2` pushes `300` to `r1` at `10.2.12.11` | `r1` pops `300`, forwards to `e1` at `10.2.101.11` |
+| AS152 to AS153 | `r2` pushes `310` to `r3` at `10.2.23.13` | `r3` pops `310`, forwards to `e3` at `10.2.103.11` |
+| AS153 to AS151 | `r3` pushes `400` to `r1` at `10.2.31.11` | `r1` pops `400`, forwards to `e1` at `10.2.101.11` |
+| AS153 to AS152 | `r3` pushes `410` to `r2` at `10.2.23.12` | `r2` pops `410`, forwards to `e2` at `10.2.102.11` |
 
 The Docker host must support Linux MPLS:
 

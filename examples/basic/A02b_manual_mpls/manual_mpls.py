@@ -23,28 +23,28 @@ MANUAL_MPLS = {
     "r1": {
         "ifaces": ["net12", "net31"],
         "routes": [
-            "ip route replace 10.152.0.0/24 encap mpls 200 via inet 10.2.12.2 dev net12",
-            "ip route replace 10.153.0.0/24 encap mpls 210 via inet 10.2.31.3 dev net31",
-            "ip -f mpls route replace 300 via inet 10.2.101.253 dev net_e1_r1",
-            "ip -f mpls route replace 400 via inet 10.2.101.253 dev net_e1_r1",
+            "ip route replace 10.152.0.0/24 encap mpls 200 via inet 10.2.12.12 dev net12",
+            "ip route replace 10.153.0.0/24 encap mpls 210 via inet 10.2.31.13 dev net31",
+            "ip -f mpls route replace 300 via inet 10.2.101.11 dev net_e1_r1",
+            "ip -f mpls route replace 400 via inet 10.2.101.11 dev net_e1_r1",
         ],
     },
     "r2": {
         "ifaces": ["net12", "net23"],
         "routes": [
-            "ip route replace 10.151.0.0/24 encap mpls 300 via inet 10.2.12.1 dev net12",
-            "ip route replace 10.153.0.0/24 encap mpls 310 via inet 10.2.23.3 dev net23",
-            "ip -f mpls route replace 200 via inet 10.2.102.253 dev net_e2_r2",
-            "ip -f mpls route replace 410 via inet 10.2.102.253 dev net_e2_r2",
+            "ip route replace 10.151.0.0/24 encap mpls 300 via inet 10.2.12.11 dev net12",
+            "ip route replace 10.153.0.0/24 encap mpls 310 via inet 10.2.23.13 dev net23",
+            "ip -f mpls route replace 200 via inet 10.2.102.11 dev net_e2_r2",
+            "ip -f mpls route replace 410 via inet 10.2.102.11 dev net_e2_r2",
         ],
     },
     "r3": {
         "ifaces": ["net23", "net31"],
         "routes": [
-            "ip route replace 10.151.0.0/24 encap mpls 400 via inet 10.2.31.1 dev net31",
-            "ip route replace 10.152.0.0/24 encap mpls 410 via inet 10.2.23.2 dev net23",
-            "ip -f mpls route replace 210 via inet 10.2.103.253 dev net_e3_r3",
-            "ip -f mpls route replace 310 via inet 10.2.103.253 dev net_e3_r3",
+            "ip route replace 10.151.0.0/24 encap mpls 400 via inet 10.2.31.11 dev net31",
+            "ip route replace 10.152.0.0/24 encap mpls 410 via inet 10.2.23.12 dev net23",
+            "ip -f mpls route replace 210 via inet 10.2.103.11 dev net_e3_r3",
+            "ip -f mpls route replace 310 via inet 10.2.103.11 dev net_e3_r3",
         ],
     },
 }
@@ -114,22 +114,22 @@ def build_emulator() -> Emulator:
     as2.createNetwork("net31", prefix="10.2.31.0/24")
 
     e1 = as2.createRouter("e1")
-    e1.joinNetwork("ix101", "10.101.0.2").joinNetwork("net_e1_r1", "10.2.101.253")
+    e1.joinNetwork("ix101", "10.101.0.2").joinNetwork("net_e1_r1", "10.2.101.11")
 
     e2 = as2.createRouter("e2")
-    e2.joinNetwork("ix102", "10.102.0.2").joinNetwork("net_e2_r2", "10.2.102.253")
+    e2.joinNetwork("ix102", "10.102.0.2").joinNetwork("net_e2_r2", "10.2.102.11")
 
     e3 = as2.createRouter("e3")
-    e3.joinNetwork("ix103", "10.103.0.2").joinNetwork("net_e3_r3", "10.2.103.253")
+    e3.joinNetwork("ix103", "10.103.0.2").joinNetwork("net_e3_r3", "10.2.103.11")
 
     r1 = as2.createRouter("r1")
-    r1.joinNetwork("net_e1_r1", "10.2.101.2").joinNetwork("net12", "10.2.12.1").joinNetwork("net31", "10.2.31.1")
+    r1.joinNetwork("net_e1_r1", "10.2.101.12").joinNetwork("net12", "10.2.12.11").joinNetwork("net31", "10.2.31.11")
 
     r2 = as2.createRouter("r2")
-    r2.joinNetwork("net_e2_r2", "10.2.102.2").joinNetwork("net12", "10.2.12.2").joinNetwork("net23", "10.2.23.2")
+    r2.joinNetwork("net_e2_r2", "10.2.102.12").joinNetwork("net12", "10.2.12.12").joinNetwork("net23", "10.2.23.12")
 
     r3 = as2.createRouter("r3")
-    r3.joinNetwork("net_e3_r3", "10.2.103.2").joinNetwork("net23", "10.2.23.3").joinNetwork("net31", "10.2.31.3")
+    r3.joinNetwork("net_e3_r3", "10.2.103.12").joinNetwork("net23", "10.2.23.13").joinNetwork("net31", "10.2.31.13")
 
     install_manual_mpls(r1, "r1")
     install_manual_mpls(r2, "r2")

@@ -32,8 +32,8 @@ def main() -> int:
             "test -x /manual_mpls_setup.sh && "
             "grep -q 'encap mpls 200' /manual_mpls_setup.sh && "
             "grep -q 'encap mpls 210' /manual_mpls_setup.sh && "
-            "grep -q 'route replace 300 via inet 10.2.101.253 dev net_e1_r1' /manual_mpls_setup.sh && "
-            "grep -q 'route replace 400 via inet 10.2.101.253 dev net_e1_r1' /manual_mpls_setup.sh && "
+            "grep -q 'route replace 300 via inet 10.2.101.11 dev net_e1_r1' /manual_mpls_setup.sh && "
+            "grep -q 'route replace 400 via inet 10.2.101.11 dev net_e1_r1' /manual_mpls_setup.sh && "
             "test -s /manual_mpls_table.txt && test ! -e /mpls_ifaces.txt",
         )
     if r2:
@@ -43,8 +43,8 @@ def main() -> int:
             "test -x /manual_mpls_setup.sh && "
             "grep -q 'encap mpls 300' /manual_mpls_setup.sh && "
             "grep -q 'encap mpls 310' /manual_mpls_setup.sh && "
-            "grep -q 'route replace 200 via inet 10.2.102.253 dev net_e2_r2' /manual_mpls_setup.sh && "
-            "grep -q 'route replace 410 via inet 10.2.102.253 dev net_e2_r2' /manual_mpls_setup.sh && "
+            "grep -q 'route replace 200 via inet 10.2.102.11 dev net_e2_r2' /manual_mpls_setup.sh && "
+            "grep -q 'route replace 410 via inet 10.2.102.11 dev net_e2_r2' /manual_mpls_setup.sh && "
             "test -s /manual_mpls_table.txt && test ! -e /mpls_ifaces.txt",
         )
     if r3:
@@ -54,8 +54,8 @@ def main() -> int:
             "test -x /manual_mpls_setup.sh && "
             "grep -q 'encap mpls 400' /manual_mpls_setup.sh && "
             "grep -q 'encap mpls 410' /manual_mpls_setup.sh && "
-            "grep -q 'route replace 210 via inet 10.2.103.253 dev net_e3_r3' /manual_mpls_setup.sh && "
-            "grep -q 'route replace 310 via inet 10.2.103.253 dev net_e3_r3' /manual_mpls_setup.sh && "
+            "grep -q 'route replace 210 via inet 10.2.103.11 dev net_e3_r3' /manual_mpls_setup.sh && "
+            "grep -q 'route replace 310 via inet 10.2.103.11 dev net_e3_r3' /manual_mpls_setup.sh && "
             "test -s /manual_mpls_table.txt && test ! -e /mpls_ifaces.txt",
         )
 
