@@ -20,31 +20,58 @@ from seedemu.services import WebService
 
 
 MANUAL_MPLS = {
-    "r1": {
-        "ifaces": ["net12", "net31"],
+    "e1": {
+        "ifaces": ["net_e1_r1"],
         "routes": [
-            "ip route replace 10.152.0.0/24 encap mpls 200 via inet 10.2.12.12 dev net12",
-            "ip route replace 10.153.0.0/24 encap mpls 210 via inet 10.2.31.13 dev net31",
-            "ip -f mpls route replace 300 via inet 10.2.101.11 dev net_e1_r1",
-            "ip -f mpls route replace 400 via inet 10.2.101.11 dev net_e1_r1",
+            "ip route replace 10.152.0.0/24 encap mpls 200 via inet 10.2.101.12 dev net_e1_r1",
+            "ip route replace 10.153.0.0/24 encap mpls 210 via inet 10.2.101.12 dev net_e1_r1",
+            "ip -f mpls route replace 302 via inet 10.101.0.151 dev ix101",
+            "ip -f mpls route replace 402 via inet 10.101.0.151 dev ix101",
+        ],
+    },
+    "e2": {
+        "ifaces": ["net_e2_r2"],
+        "routes": [
+            "ip route replace 10.151.0.0/24 encap mpls 300 via inet 10.2.102.12 dev net_e2_r2",
+            "ip route replace 10.153.0.0/24 encap mpls 310 via inet 10.2.102.12 dev net_e2_r2",
+            "ip -f mpls route replace 202 via inet 10.102.0.152 dev ix102",
+            "ip -f mpls route replace 412 via inet 10.102.0.152 dev ix102",
+        ],
+    },
+    "e3": {
+        "ifaces": ["net_e3_r3"],
+        "routes": [
+            "ip route replace 10.151.0.0/24 encap mpls 400 via inet 10.2.103.12 dev net_e3_r3",
+            "ip route replace 10.152.0.0/24 encap mpls 410 via inet 10.2.103.12 dev net_e3_r3",
+            "ip -f mpls route replace 212 via inet 10.103.0.153 dev ix103",
+            "ip -f mpls route replace 312 via inet 10.103.0.153 dev ix103",
+        ],
+    },
+    "r1": {
+        "ifaces": ["net_e1_r1", "net12", "net31"],
+        "routes": [
+            "ip -f mpls route replace 200 as 201 via inet 10.2.12.12 dev net12",
+            "ip -f mpls route replace 210 as 211 via inet 10.2.31.13 dev net31",
+            "ip -f mpls route replace 301 as 302 via inet 10.2.101.11 dev net_e1_r1",
+            "ip -f mpls route replace 401 as 402 via inet 10.2.101.11 dev net_e1_r1",
         ],
     },
     "r2": {
-        "ifaces": ["net12", "net23"],
+        "ifaces": ["net_e2_r2", "net12", "net23"],
         "routes": [
-            "ip route replace 10.151.0.0/24 encap mpls 300 via inet 10.2.12.11 dev net12",
-            "ip route replace 10.153.0.0/24 encap mpls 310 via inet 10.2.23.13 dev net23",
-            "ip -f mpls route replace 200 via inet 10.2.102.11 dev net_e2_r2",
-            "ip -f mpls route replace 410 via inet 10.2.102.11 dev net_e2_r2",
+            "ip -f mpls route replace 201 as 202 via inet 10.2.102.11 dev net_e2_r2",
+            "ip -f mpls route replace 300 as 301 via inet 10.2.12.11 dev net12",
+            "ip -f mpls route replace 310 as 311 via inet 10.2.23.13 dev net23",
+            "ip -f mpls route replace 411 as 412 via inet 10.2.102.11 dev net_e2_r2",
         ],
     },
     "r3": {
-        "ifaces": ["net23", "net31"],
+        "ifaces": ["net_e3_r3", "net23", "net31"],
         "routes": [
-            "ip route replace 10.151.0.0/24 encap mpls 400 via inet 10.2.31.11 dev net31",
-            "ip route replace 10.152.0.0/24 encap mpls 410 via inet 10.2.23.12 dev net23",
-            "ip -f mpls route replace 210 via inet 10.2.103.11 dev net_e3_r3",
-            "ip -f mpls route replace 310 via inet 10.2.103.11 dev net_e3_r3",
+            "ip -f mpls route replace 211 as 212 via inet 10.2.103.11 dev net_e3_r3",
+            "ip -f mpls route replace 311 as 312 via inet 10.2.103.11 dev net_e3_r3",
+            "ip -f mpls route replace 400 as 401 via inet 10.2.31.11 dev net31",
+            "ip -f mpls route replace 410 as 411 via inet 10.2.23.12 dev net23",
         ],
     },
 }
@@ -131,9 +158,8 @@ def build_emulator() -> Emulator:
     r3 = as2.createRouter("r3")
     r3.joinNetwork("net_e3_r3", "10.2.103.12").joinNetwork("net23", "10.2.23.13").joinNetwork("net31", "10.2.31.13")
 
-    install_manual_mpls(r1, "r1")
-    install_manual_mpls(r2, "r2")
-    install_manual_mpls(r3, "r3")
+    for router, router_name in ((e1, "e1"), (e2, "e2"), (e3, "e3"), (r1, "r1"), (r2, "r2"), (r3, "r3")):
+        install_manual_mpls(router, router_name)
 
     for asn, ix in ((151, 101), (152, 102), (153, 103)):
         current_as = base.createAutonomousSystem(asn)

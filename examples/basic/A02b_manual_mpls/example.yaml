@@ -1,6 +1,6 @@
 id: basic-a02b-manual-mpls
 name: Transit AS Manual MPLS
-description: A transit AS with BGP edge routers and a triangle MPLS core configured manually instead of using LDP.
+description: A transit AS with MPLS provider-edge routers and a triangle core configured manually instead of using LDP.
 runner: internet
 script: manual_mpls.py
 platform: amd
