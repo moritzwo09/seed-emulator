@@ -94,9 +94,9 @@ def main() -> int:
         if not script_text.endswith("\n"):
             script_text += "\n"
         run_add_record = (
-            "cat > /tmp/add_record.sh <<'EOF'\n"
+            "cat > /tmp/add_record.sh <<'__SEED_ADD_RECORD_SCRIPT__'\n"
             "{}"
-            "EOF\n"
+            "__SEED_ADD_RECORD_SCRIPT__\n"
             "chmod +x /tmp/add_record.sh\n"
             "/tmp/add_record.sh 5.6.7.8"
         ).format(script_text)
