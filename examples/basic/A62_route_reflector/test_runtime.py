@@ -1,8 +1,21 @@
 #!/usr/bin/env python3
+#
+# Purpose: validate the running A62 IPv4/BIRD Route Reflector example after
+# TestRunner starts Docker Compose. Inputs come from TestRunner environment
+# variables and generated docker-compose.yml labels. Outputs are JSON runtime
+# summaries. Side effects are limited to read-only protocol checks.
 
 from __future__ import annotations
 
+from pathlib import Path
+import sys
 from typing import List
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from seedemu.testing import ComposeRuntimeTest, ComposeService
 from seedemu.testing.runtime import ADDRESS_LABEL, ASN_LABEL, NODE_LABEL
@@ -74,40 +87,16 @@ def main() -> int:
             timeout=60,
         )
 
-    host150 = test.require_service(150, "host_0")
-    host152 = test.require_service(152, "host_0")
-    host154 = test.require_service(154, "host_0")
-    host160 = test.require_service(160, "host_0")
-    host171 = test.require_service(171, "host_0")
-
-    reachability_pairs = [
-        ("AS150 reaches AS152 across the RR mini Internet", host150, host152),
-        ("AS152 reaches AS150 across the RR mini Internet", host152, host150),
-        ("AS150 reaches AS160 through AS3 RR clusters", host150, host160),
-        ("AS160 reaches AS150 through AS3 RR clusters", host160, host150),
-        ("AS171 reaches AS154 across transit ASes", host171, host154),
-        ("AS154 reaches AS171 across transit ASes", host154, host171),
+    rr_targets = [
+        (3, "r100"),
+        (3, "r103"),
+        (3, "r104"),
+        (3, "r105"),
+        (12, "r101"),
+        (12, "r104"),
     ]
-    for name, source, target in reachability_pairs:
-        if source and target:
-            test.exec_check(
-                name,
-                source,
-                "ping -c 3 {} >/dev/null".format(target.address),
-                retries=40,
-                interval=5,
-                timeout=45,
-            )
-
-    rr_routers = [
-        test.require_service(3, "r100"),
-        test.require_service(3, "r103"),
-        test.require_service(3, "r104"),
-        test.require_service(3, "r105"),
-        test.require_service(12, "r101"),
-        test.require_service(12, "r104"),
-    ]
-    for router in rr_routers:
+    for asn, node in rr_targets:
+        router = test.find_service(asn, node)
         if router:
             test.exec_check(
                 "{} RR iBGP protocol names contain rr".format(service_label(router)),
@@ -116,6 +105,12 @@ def main() -> int:
                 retries=20,
                 interval=3,
                 timeout=45,
+            )
+        else:
+            test.structural_check(
+                "AS{} {} is available for RR protocol checks".format(asn, node),
+                False,
+                "service for AS{} node {} not found".format(asn, node),
             )
 
     test.write_summary("a62-route-reflector-runtime-test.json")

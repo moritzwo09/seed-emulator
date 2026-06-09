@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 # encoding: utf-8
+#
+# Purpose: build the A62 IPv4/BIRD Route Reflector mini-Internet example.
+# Inputs are standard TestRunner CLI arguments. Outputs are Docker compiler
+# files under --output. Run from the repository root or this example directory.
 
 from __future__ import annotations
 

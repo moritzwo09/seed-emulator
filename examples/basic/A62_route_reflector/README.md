@@ -53,12 +53,18 @@ python seedemu/testing/cli.py all examples/basic/A62_route_reflector/example.yam
 
 ## Runtime Checks
 
-The manifest and `test_runtime.py` validate:
+The manifest validates simple fixed runtime checks:
 
-- generated RR configuration contains the expected cluster ID and RR mesh;
-- representative hosts can communicate across AS boundaries;
-- every generated `brdnode_*` service has healthy BIRD protocols, with BGP
-  sessions established;
+- all border router services and ping endpoint services used by the runtime
+  checks are running;
+- representative hosts can communicate across AS boundaries in both tested
+  directions.
+
+The custom `test_runtime.py` validates dynamic or example-specific behavior:
+
+- generated routers have healthy BIRD protocols, with BGP sessions established;
+- every generated `brdnode_*` service is discovered from Docker Compose
+  metadata;
 - routers in RR-enabled ASes (`AS3` and `AS12`) expose iBGP protocol names that
   contain `rr`.
 
