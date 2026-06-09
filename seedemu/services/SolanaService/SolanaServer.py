@@ -141,7 +141,7 @@ class SolanaBootstrapServer(SolanaServer):
         )
         node.setFile("/opt/solana/run-bootstrap.sh", script)
         node.addBuildCommandAtEnd("chmod +x /opt/solana/run-bootstrap.sh")
-        node.appendStartCommand("/opt/solana/run-bootstrap.sh")
+        node.appendStartCommand("/opt/solana/run-bootstrap.sh", fork=True)
 
 
 class SolanaValidatorServer(SolanaServer):
@@ -182,7 +182,7 @@ class SolanaValidatorServer(SolanaServer):
         )
         node.setFile("/opt/solana/run-validator.sh", script)
         node.addBuildCommandAtEnd("chmod +x /opt/solana/run-validator.sh")
-        node.appendStartCommand("/opt/solana/run-validator.sh")
+        node.appendStartCommand("/opt/solana/run-validator.sh", fork=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -293,8 +293,9 @@ if ! solana --url "$RPC_URL" vote-account "$LEDGER_DIR/vote-account.json" >/dev/
     echo "[seedemu-solana] airdrop not ready, retrying ..."; sleep 2
   done
   solana --url "$RPC_URL" create-vote-account \
+    --fee-payer "$LEDGER_DIR/identity.json" \
     "$LEDGER_DIR/vote-account.json" "$LEDGER_DIR/identity.json" "$LEDGER_DIR/withdrawer.json" \
-    --keypair "$LEDGER_DIR/identity.json" || true
+    || true
 fi
 
 echo "[seedemu-solana] starting validator on $SELF_IP (entrypoint $ENTRYPOINT)"

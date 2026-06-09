@@ -1,53 +1,73 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
-"""Minimal SolanaService example: a private, self-contained Solana cluster.
+"""SolanaService example: a private, self-contained Solana cluster.
 
 Topology: a small Internet (10 stub ASes) on top of which we deploy a private
-Agave/Solana cluster consisting of one bootstrap (genesis) validator and two
-joining validators, each in a different Autonomous System.
+Agave/Solana cluster consisting of one bootstrap (genesis) validator and nine
+joining validators distributed across the stub Autonomous Systems.
 
 This mirrors the structure of the Monero example (D60_monero): build the base
 Internet with Makers, attach a blockchain service, bind its virtual nodes to
 hosts, render, and compile to Docker.
 
-NOTE: Agave publishes pre-built binaries for x86_64 (amd64) only, so this
-example targets the AMD64 platform. Before compiling, build the base image once:
+The cluster runs natively on both amd64 and arm64: the seedemu-solana base image
+downloads Agave's prebuilt binaries on amd64 and compiles them from source on
+arm64. Build the base image once before compiling:
 
     docker build -t seedemu-solana ../../../docker_images/seedemu-solana
 """
 
 from __future__ import annotations
 
-import os
+import platform as _platform
 import sys
+from pathlib import Path
+
+SCRIPT_PATH = Path(__file__).resolve()
+EXAMPLE_DIR = SCRIPT_PATH.parent
+REPO_ROOT = SCRIPT_PATH.parents[3]
+if (REPO_ROOT / "seedemu").is_dir():
+    sys.path.insert(0, str(REPO_ROOT))
 
 from seedemu import Binding, Filter, Makers
 from seedemu.compiler import Docker, Platform
 from seedemu.services.SolanaService import SolanaService
 
 
-def _bind(emu, vnode: str, asn: int, host_index: int) -> None:
-    """Bind a Solana virtual node to host_<host_index> in the given AS."""
+def _bind(emu, vnode: str, asn: int, host_index: int, display_name: str) -> None:
+    """Bind a Solana virtual node to host_<host_index> and name the host."""
+    emu.getLayer('Base').getAutonomousSystem(asn).getHost(
+        f"host_{host_index}"
+    ).setDisplayName(display_name)
     emu.addBinding(Binding(vnode, filter=Filter(asn=asn, nodeName=f"^host_{host_index}$")))
 
 
 ###############################################################################
-# Select the platform (Agave is amd64-only; arm is accepted but will warn).
-script_name = os.path.basename(__file__)
+# Select the platform. With no argument we detect the host architecture; the
+# seedemu-solana image is built natively per-arch (prebuilt on amd64, compiled
+# from source on arm64), so both are first-class.
+script_name = SCRIPT_PATH.name
+
+
+def _detect_platform() -> Platform:
+    machine = _platform.machine().lower()
+    return Platform.ARM64 if machine in ('arm64', 'aarch64') else Platform.AMD64
+
 
 if len(sys.argv) == 1:
-    platform = Platform.AMD64
+    platform = _detect_platform()
 elif len(sys.argv) == 2:
-    if sys.argv[1].lower() == 'amd':
+    arg = sys.argv[1].lower()
+    if arg == 'amd':
         platform = Platform.AMD64
-    elif sys.argv[1].lower() == 'arm':
+    elif arg == 'arm':
         platform = Platform.ARM64
     else:
-        print(f"Usage:  {script_name} amd|arm")
+        print(f"Usage:  {script_name} [amd|arm]   (default: host architecture)")
         sys.exit(1)
 else:
-    print(f"Usage:  {script_name} amd|arm")
+    print(f"Usage:  {script_name} [amd|arm]   (default: host architecture)")
     sys.exit(1)
 
 ###############################################################################
@@ -65,20 +85,27 @@ blockchain = solana.createBlockchain("seed-solana")
 # cluster.
 boot = blockchain.createBootstrapValidator("sol-boot-150")
 boot.setDisplayName("Solana-Bootstrap-150")
-_bind(emu, "sol-boot-150", asn=150, host_index=0)
+_bind(emu, "sol-boot-150", asn=150, host_index=0, display_name="Solana-Bootstrap-150")
 
-# AS150 / host_1: a validator in the SAME AS as the bootstrap. Being on the same
-# network, it reaches the bootstrap directly and joins reliably.
-v_same = blockchain.createValidator("sol-validator-150b")
-v_same.setDisplayName("Solana-Validator-150b")
-_bind(emu, "sol-validator-150b", asn=150, host_index=1)
+# Nine joining validators. AS150/host_1 is on-link with the bootstrap; the rest
+# join over inter-domain (BGP) routing, demonstrating a larger private Solana
+# cluster spread across the emulated Internet.
+validator_bindings = [
+    ("sol-validator-150b", "Solana-Validator-150b", 150, 1),
+    ("sol-validator-151", "Solana-Validator-151", 151, 0),
+    ("sol-validator-152", "Solana-Validator-152", 152, 0),
+    ("sol-validator-153", "Solana-Validator-153", 153, 0),
+    ("sol-validator-154", "Solana-Validator-154", 154, 0),
+    ("sol-validator-160", "Solana-Validator-160", 160, 0),
+    ("sol-validator-161", "Solana-Validator-161", 161, 0),
+    ("sol-validator-162", "Solana-Validator-162", 162, 0),
+    ("sol-validator-163", "Solana-Validator-163", 163, 0),
+]
 
-# AS151 / host_0: a validator in a DIFFERENT AS. It reaches the bootstrap over
-# inter-domain (BGP) routing, demonstrating a cluster that spans the emulated
-# Internet.
-v_xas = blockchain.createValidator("sol-validator-151")
-v_xas.setDisplayName("Solana-Validator-151")
-_bind(emu, "sol-validator-151", asn=151, host_index=0)
+for vnode, display_name, asn, host_index in validator_bindings:
+    validator = blockchain.createValidator(vnode)
+    validator.setDisplayName(display_name)
+    _bind(emu, vnode, asn=asn, host_index=host_index, display_name=display_name)
 
 ###############################################################################
 # Add the Solana service as a layer, then render.
@@ -88,4 +115,4 @@ emu.render()
 ###############################################################################
 # Compile docker-compose and the build context into ./output.
 docker = Docker(internetMapEnabled=True, platform=platform)
-emu.compile(docker, "./output", override=True)
+emu.compile(docker, str(EXAMPLE_DIR / "output"), override=True)
