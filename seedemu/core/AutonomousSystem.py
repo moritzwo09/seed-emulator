@@ -11,7 +11,7 @@ from .Configurable import Configurable
 from .Customizable import Customizable
 from .Node import promote_to_real_world_router
 from ipaddress import IPv4Network
-from typing import Dict, List
+from typing import Dict, List, Set, Tuple
 import requests
 
 RIS_PREFIXLIST_URL = 'https://stat.ripe.net/data/announced-prefixes/data.json'
@@ -29,6 +29,7 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
     __hosts: Dict[str, Node]
     __nets: Dict[str, Network]
     __name_servers: List[str]
+    __clusters: Dict[str, Tuple[Set[str], Set[str]]]
 
     def __init__(self, asn: int, subnetTemplate: str = "10.{}.0.0/16"):
         """!
@@ -44,7 +45,91 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
         self.__asn = asn
         self.__subnets = None if asn > 255 else list(IPv4Network(subnetTemplate.format(asn)).subnets(new_prefix = 24))
         self.__name_servers = []
+        self.__clusters = {}
 
+    def createCluster(self, address: str) -> AutonomousSystem:
+        """!
+        @brief Register an iBGP Route Reflector cluster ID for this AS.
+
+        The cluster starts with empty RR/client membership. Calling this method
+        with an existing cluster ID is idempotent.
+
+        @param address cluster ID rendered into BIRD's rr cluster id field.
+
+        @returns self, for chaining API calls.
+        """
+        if address not in self.__clusters:
+            self.__clusters[address] = (set(), set())
+
+        return self
+
+    def _validate_cluster_integrity(self, data: Dict[str, Tuple[Set[str], Set[str]]]):
+        """!
+        @brief Validate Route Reflector cluster membership.
+
+        A single cluster without any RR is treated as the legacy full-mesh iBGP
+        topology. Multi-cluster topologies, or any topology containing an RR,
+        must satisfy the RR/client contract.
+
+        @param data mapping from cluster ID to RR names and client names.
+        """
+        if len(data) == 1:
+            _, (rrs, _) = list(data.items())[0]
+            if len(rrs) == 0:
+                return
+
+        for cid, (rr_set, client_set) in data.items():
+            assert len(rr_set) > 0, (
+                "[Topology Error] AS{} cluster '{}' is invalid: missing Route "
+                "Reflector. In a multi-cluster or RR topology, every cluster "
+                "must have an RR.".format(self.__asn, cid)
+            )
+            assert len(client_set) > 0, (
+                "[Topology Error] AS{} cluster '{}' is invalid: missing clients. "
+                "Route Reflector(s) {} have no clients to serve.".format(
+                    self.__asn, cid, sorted(rr_set)
+                )
+            )
+
+    def _aggregateBgpClusters(self) -> Dict[str, Tuple[Set[str], Set[str]]]:
+        """!
+        @brief Build Route Reflector cluster membership from AS/router state.
+
+        Explicitly registered clusters provide the allowed cluster IDs. Routers
+        that joined a cluster are assigned to that cluster; routers without an
+        explicit cluster are assigned to the implicit default cluster.
+
+        @returns mapping from cluster ID to RR names and client names.
+        """
+        merged_data = {
+            cid: (set(rrs), set(clients))
+            for cid, (rrs, clients) in self.__clusters.items()
+        }
+        default_cluster_id = "10.0.0.0"
+
+        for router in self.__routers.values():
+            r_cid = router.getBgpClusterId()
+            is_rr = router.isRouteReflector()
+            r_name = router.getName()
+
+            if r_cid is not None:
+                assert r_cid in merged_data, "Cluster ID {} does not exist in AS{}.".format(
+                    r_cid, self.__asn
+                )
+                target_cid = r_cid
+            else:
+                if default_cluster_id not in merged_data:
+                    merged_data[default_cluster_id] = (set(), set())
+                target_cid = default_cluster_id
+
+            if is_rr:
+                merged_data[target_cid][0].add(r_name)
+            else:
+                merged_data[target_cid][1].add(r_name)
+
+        self._validate_cluster_integrity(merged_data)
+        self.__clusters = merged_data
+        return self.__clusters
 
 
     def setNameServers(self, servers: List[str]) -> AutonomousSystem:
