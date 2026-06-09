@@ -22,6 +22,7 @@ class K8sTools:
         configK3s: str | Path,
         kubeconfig: str | Path,
         *,
+        inventory: str | Path | None = None,
         keepTemp: bool = False,
     ) -> None:
         """Create infrastructure and write K3s access files.
@@ -30,9 +31,10 @@ class K8sTools:
             inputConfig: YAML with kind=kvmOvn, physicalOvn, or multiHostKvmOvn.
             configK3s: Output configK3s.yaml path.
             kubeconfig: Output kubeconfig path.
+            inventory: Optional output inventory.yaml path.
             keepTemp: Keep temporary setup resources for debugging.
         """
-        buildCluster(inputConfig, configK3s, kubeconfig, keep_temp=keepTemp)
+        buildCluster(inputConfig, configK3s, kubeconfig, inventory=inventory, keep_temp=keepTemp)
 
     def up(
         self,
@@ -93,6 +95,7 @@ class K8sTools:
         build.add_argument("--input", required=True, help="input YAML with explicit kind")
         build.add_argument("--config-k3s", required=True, help="output configK3s.yaml")
         build.add_argument("--kubeconfig", required=True, help="output kubeconfig.yaml")
+        build.add_argument("--inventory", help="optional output inventory.yaml with node resources")
         build.add_argument("--keep-temp", action="store_true", help="keep temporary setup resources")
 
         up = sub.add_parser("up", help="build images and deploy workload")
@@ -116,7 +119,7 @@ class K8sTools:
 
         args = parser.parse_args(argv)
         if args.command == "build":
-            self.build(args.input, args.config_k3s, args.kubeconfig, keepTemp=args.keep_temp)
+            self.build(args.input, args.config_k3s, args.kubeconfig, inventory=args.inventory, keepTemp=args.keep_temp)
         elif args.command == "up":
             self.up(
                 args.folder,

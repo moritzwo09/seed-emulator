@@ -229,6 +229,8 @@ def renderKustomization(config: Path) -> dict[str, str]:
             values["networkBackend"],
             "--cni-master-interface",
             values["cniMasterInterface"],
+            "--attached-cni-type",
+            values["attachedCniType"],
             "--output",
             values["kustomization"],
         ]

@@ -13,7 +13,8 @@ Build infrastructure:
 python k8sTools.py build \
   --input configKvmOvn.yaml \
   --config-k3s configK3s.yaml \
-  --kubeconfig kubeconfig.yaml
+  --kubeconfig kubeconfig.yaml \
+  --inventory inventory.yaml
 ```
 
 Deploy workload:
@@ -66,7 +67,7 @@ for readiness.
 
 No persistent setup/running working directory is created by default. Persistent
 outputs are limited to the user-requested `configK3s.yaml`, `kubeconfig.yaml`,
-and the compiler output directory.
+optional `inventory.yaml`, and the compiler output directory.
 
 All commands accept `--keep-temp` to leave the copied setup/running resources
 on disk for debugging.
