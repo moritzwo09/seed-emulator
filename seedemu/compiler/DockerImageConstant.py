@@ -6,12 +6,12 @@ UBUNTU_IMAGE   = DockerImage(name='ubuntu:24.04',
                                 software=[],
                                 subset=None)
 
-BASE_IMAGE     = DockerImage(name='handsonsecurity/seedemu-base:2.0',
+BASE_IMAGE     = DockerImage(name='handsonsecurity/seedemu-multiarch-base:buildx-latest',
                                 software=['zsh', 'curl', 'nano', 'vim-nox', 'mtr-tiny', 'iproute2',
                                         'iputils-ping', 'tcpdump', 'termshark', 'dnsutils', 'jq', 'ipcalc', 'netcat-openbsd'],
                                 subset=UBUNTU_IMAGE)
 
-ROUTER_IMAGE   = DockerImage(name='handsonsecurity/seedemu-router:2.0',
+ROUTER_IMAGE   = DockerImage(name='handsonsecurity/seedemu-multiarch-router:buildx-latest',
                                 software=['bird2'],
                                 subset=BASE_IMAGE)
 
@@ -29,10 +29,11 @@ ETHEREUM_IMAGE_POS = DockerImage(name='handsonsecurity/seedemu-ethereum:pos2.0',
 
 MONERO_IMAGE = DockerImage(name='handsonsecurity/seedemu-monero:latest', software=[], subset=BASE_IMAGE)
 
-# Agave (Solana) is only published as pre-built x86_64 Linux binaries, so the
-# image is built locally from docker_images/seedemu-solana (see its Dockerfile)
-# rather than pulled from Docker Hub. Build it once before compiling a Solana
-# emulation:  docker build -t seedemu-solana docker_images/seedemu-solana
+# Agave (Solana) is packaged in a local seedemu-solana image built from
+# docker_images/seedemu-solana. The Dockerfile downloads the pinned upstream
+# amd64 bundle and builds the same pinned version from source on arm64.
+# Build it once before compiling a Solana emulation:
+#   docker build -t seedemu-solana docker_images/seedemu-solana
 SOLANA_IMAGE = DockerImage(name='seedemu-solana', software=[], local=False, subset=BASE_IMAGE)
 
 OP_STACK_IMAGE = DockerImage(name='huagluck/seedemu-op-stack', software=[], subset=BASE_IMAGE)
@@ -70,8 +71,8 @@ ETHEREUM_IMAGE_ARM64_POS = DockerImage(name='handsonsecurity/seedemu-ethereum:po
 
 MONERO_IMAGE_ARM64 = DockerImage(name='handsonsecurity/seedemu-monero:latest', software=[], subset=BASE_IMAGE_ARM64)
 
-# Agave does not publish arm64 Linux binaries; the same locally-built image
-# name is referenced for mapping completeness (Solana emulations target AMD64).
+# The same local image name is used for arm64; its Dockerfile builds Agave from
+# source because upstream release bundles are amd64-only.
 SOLANA_IMAGE_ARM64 = DockerImage(name='seedemu-solana', software=[], local=False, subset=BASE_IMAGE_ARM64)
 
 OP_STACK_IMAGE_ARM64 = DockerImage(name='huagluck/seedemu-op-stack', software=[], subset=BASE_IMAGE_ARM64)
