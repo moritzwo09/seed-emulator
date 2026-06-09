@@ -1,32 +1,63 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
+from pathlib import Path
+import argparse
+import sys
+
 from seedemu import *
-import sys, os
-import math
-from eth_account import Account
 
 DOMAIN = ".net"
 
-def run(dumpfile = None, total_beacon_nodes=3, vc_per_beacon=3):
-    ###############################################################################
-    # Set the platform information
-    if dumpfile is None:
-        script_name = os.path.basename(__file__)
-        if len(sys.argv) == 1:
-            platform = Platform.AMD64
-        elif len(sys.argv) == 2:
-            if sys.argv[1].lower() == 'amd':
-                platform = Platform.AMD64
-            elif sys.argv[1].lower() == 'arm':
-                platform = Platform.ARM64
-            else:
-                print(f"Usage:  {script_name} amd|arm")
-                sys.exit(1)
-        else:
-            print(f"Usage:  {script_name} amd|arm")
-            sys.exit(1)
 
+def _parse_args(argv):
+    parser = argparse.ArgumentParser(description="Build the D01 Ethereum PoS example.")
+    parser.add_argument(
+        "legacy_platform",
+        nargs="?",
+        choices=["amd", "arm"],
+        help="legacy positional platform argument",
+    )
+    parser.add_argument(
+        "--platform",
+        choices=["amd", "arm"],
+        help="target Docker platform",
+    )
+    parser.add_argument(
+        "--output",
+        default="output",
+        help="output directory for generated Docker Compose files",
+    )
+    parser.add_argument(
+        "--beacon-nodes",
+        type=int,
+        default=3,
+        help="number of geth/beacon node pairs",
+    )
+    parser.add_argument(
+        "--validators-per-beacon",
+        type=int,
+        default=3,
+        help="validator clients per beacon node",
+    )
+    parser.add_argument(
+        "--dumpfile",
+        help="dump the emulator object instead of compiling Docker output",
+    )
+    args = parser.parse_args(argv)
+    if args.beacon_nodes < 1:
+        parser.error("--beacon-nodes must be >= 1")
+    if args.validators_per_beacon < 1:
+        parser.error("--validators-per-beacon must be >= 1")
+    return args
+
+
+def _platform_from_name(name):
+    return Platform.ARM64 if name == "arm" else Platform.AMD64
+
+
+def run(dumpfile=None, total_beacon_nodes=3, vc_per_beacon=3, platform=Platform.AMD64, output="output"):
+    ###############################################################################
     # Configure the number of nodes
     geth_node_number = total_beacon_nodes
     beacon_node_number = total_beacon_nodes
@@ -44,14 +75,15 @@ def run(dumpfile = None, total_beacon_nodes=3, vc_per_beacon=3):
     # consensus="ConsensusMechnaism.POS" : set the consensus of the blockchain as "ConsensusMechanism.POS".
     # supported consensus option: ConsensusMechanism.POA, ConsensusMechanism.POW, ConsensusMechanism.POS
     blockchain = eth.createBlockchain(chainName="pos", consensus=ConsensusMechanism.POS)
-    # Generate a list of accounts and prefund them
+    # Generate a list of wallet-compatible local accounts and prefund them.
     accounts_total  = 10
     pre_funded_amount = 1000000
     mnemonic = "gentle always fun glass foster produce north tail security list example gain"
-    Account.enable_unaudited_hdwallet_features()
-    for i in range(accounts_total):
-        account = Account.from_mnemonic(mnemonic, account_path=f"m/44'/60'/0'/0/{i}")
-        blockchain.addLocalAccount(address=account.address, balance=pre_funded_amount)
+    blockchain.addLocalAccountsFromMnemonic(
+        mnemonic=mnemonic,
+        total=accounts_total,
+        balance=pre_funded_amount,
+    )
     asns = [150, 151, 152, 153, 154, 160, 161, 162, 163, 164]
     geth_nodes: List[PoSGethServer] = []
     beacon_nodes: List[PoSBeaconServer] = []
@@ -87,12 +119,15 @@ def run(dumpfile = None, total_beacon_nodes=3, vc_per_beacon=3):
         VcServer.enablePOSValidatorAtGenesis()
         vc_nodes.append(VcServer)
         emu.getVirtualNode(f'vcnode{i}').setDisplayName(f'Ethereum-POS-Validator-{i+1}')
-    
+
+    faucet_geth_node = "gethnode{}".format(1 if geth_node_number > 1 else 0)
+    utility_geth_node = "gethnode{}".format(2 if geth_node_number > 2 else geth_node_number - 1)
+
     # Create the Faucet server
     faucet:FaucetServer = blockchain.createFaucetServer(
                 vnode='faucet',
                 port=80,
-                linked_eth_node='gethnode1',
+                linked_eth_node=faucet_geth_node,
                 balance=10000,
                 max_fund_amount=10)
     faucet.setDisplayName('Faucet')
@@ -101,7 +136,7 @@ def run(dumpfile = None, total_beacon_nodes=3, vc_per_beacon=3):
     util_server:EthUtilityServer = blockchain.createEthUtilityServer(
                 vnode='utility',
                 port=5000,
-                linked_eth_node='gethnode2',
+                linked_eth_node=utility_geth_node,
                 linked_faucet_node='faucet')
     util_server.setDisplayName('UtilityServer')
     util_server.addHostName('utility' + DOMAIN)
@@ -131,7 +166,15 @@ def run(dumpfile = None, total_beacon_nodes=3, vc_per_beacon=3):
     else:
         emu.render()
         docker = Docker(internetMapEnabled=True, etherViewEnabled=True, platform=platform)
-        emu.compile(docker, './output', override=True)
+        emu.compile(docker, str(output), override=True)
 
 if __name__ == "__main__":
-    run()
+    parsed_args = _parse_args(sys.argv[1:])
+    selected_platform = parsed_args.platform or parsed_args.legacy_platform or "amd"
+    run(
+        dumpfile=parsed_args.dumpfile,
+        total_beacon_nodes=parsed_args.beacon_nodes,
+        vc_per_beacon=parsed_args.validators_per_beacon,
+        platform=_platform_from_name(selected_platform),
+        output=Path(parsed_args.output),
+    )
