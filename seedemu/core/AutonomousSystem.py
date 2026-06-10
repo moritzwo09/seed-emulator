@@ -47,7 +47,7 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
         self.__name_servers = []
         self.__clusters = {}
 
-    def createCluster(self, address: str) -> AutonomousSystem:
+    def createBgpCluster(self, address: str) -> AutonomousSystem:
         """!
         @brief Register an iBGP Route Reflector cluster ID for this AS.
 

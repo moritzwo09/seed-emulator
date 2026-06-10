@@ -1,6 +1,6 @@
 id: basic-a62-route-reflector
 name: Route Reflector Mini Internet
-description: A B00-style mini Internet that demonstrates legacy full-mesh iBGP, one-RR, and two-RR Route Reflector modes.
+description: A B00-style mini Internet that demonstrates legacy full-mesh iBGP, one-RR, and a larger two-cluster Route Reflector transit AS.
 runner: internet
 script: route_reflector.py
 platform: amd
@@ -40,6 +40,10 @@ runtime:
         - brdnode_3_r103
         - brdnode_3_r104
         - brdnode_3_r105
+        - rnode_3_r110
+        - rnode_3_r111
+        - rnode_3_r112
+        - rnode_3_r113
         - brdnode_4_r100
         - brdnode_4_r102
         - brdnode_4_r104

@@ -26,6 +26,8 @@ from seedemu.utilities import Makers
 AS12_CLUSTER_ID = "10.12.0.1"
 AS3_WEST_CLUSTER_ID = "10.3.0.1"
 AS3_EAST_CLUSTER_ID = "10.3.0.2"
+AS3_WEST_CLIENTS = ["r105", "r110", "r111"]
+AS3_EAST_CLIENTS = ["r104", "r112", "r113"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,6 +47,46 @@ def parse_args() -> argparse.Namespace:
 
 def resolve_platform(name: str) -> Platform:
     return Platform.AMD64 if name == "amd" else Platform.ARM64
+
+
+def make_as3_route_reflector_transit(base: Base):
+    """Create the larger AS3 topology used to demonstrate RR scaling."""
+    as3 = base.createAutonomousSystem(3)
+
+    border_routers = {
+        100: as3.createRouter("r100").joinNetwork("ix100"),
+        103: as3.createRouter("r103").joinNetwork("ix103"),
+        104: as3.createRouter("r104").joinNetwork("ix104"),
+        105: as3.createRouter("r105").joinNetwork("ix105"),
+    }
+    routers = {
+        "r100": border_routers[100],
+        "r103": border_routers[103],
+        "r104": border_routers[104],
+        "r105": border_routers[105],
+        "r110": as3.createRouter("r110"),
+        "r111": as3.createRouter("r111"),
+        "r112": as3.createRouter("r112"),
+        "r113": as3.createRouter("r113"),
+    }
+
+    for left, right in [
+        ("r100", "r105"),
+        ("r100", "r110"),
+        ("r100", "r111"),
+        ("r100", "r103"),
+        ("r103", "r104"),
+        ("r103", "r112"),
+        ("r103", "r113"),
+        ("r105", "r103"),
+        ("r111", "r112"),
+    ]:
+        network = "net_{}_{}".format(left[1:], right[1:])
+        as3.createNetwork(network)
+        routers[left].joinNetwork(network)
+        routers[right].joinNetwork(network)
+
+    return as3
 
 
 def build_mini_internet(emu: Emulator, base: Base, ebgp: Ebgp, hosts_per_as: int):
@@ -69,12 +111,7 @@ def build_mini_internet(emu: Emulator, base: Base, ebgp: Ebgp, hosts_per_as: int
         [100, 101, 102, 105],
         [(100, 101), (101, 102), (100, 105)],
     )
-    Makers.makeTransitAs(
-        base,
-        3,
-        [100, 103, 104, 105],
-        [(100, 103), (100, 105), (103, 105), (103, 104)],
-    )
+    make_as3_route_reflector_transit(base)
     Makers.makeTransitAs(
         base,
         4,
@@ -89,18 +126,20 @@ def build_mini_internet(emu: Emulator, base: Base, ebgp: Ebgp, hosts_per_as: int
 
     # AS12 demonstrates a single Route Reflector and one client.
     as12 = base.getAutonomousSystem(12)
-    as12.createCluster(AS12_CLUSTER_ID)
+    as12.createBgpCluster(AS12_CLUSTER_ID)
     as12.getRouter("r101").joinBgpCluster(AS12_CLUSTER_ID).makeRouteReflector()
     as12.getRouter("r104").joinBgpCluster(AS12_CLUSTER_ID)
 
     # AS3 demonstrates two RR clusters plus an RR-to-RR mesh.
     as3 = base.getAutonomousSystem(3)
-    as3.createCluster(AS3_WEST_CLUSTER_ID)
-    as3.createCluster(AS3_EAST_CLUSTER_ID)
+    as3.createBgpCluster(AS3_WEST_CLUSTER_ID)
+    as3.createBgpCluster(AS3_EAST_CLUSTER_ID)
     as3.getRouter("r100").joinBgpCluster(AS3_WEST_CLUSTER_ID).makeRouteReflector()
-    as3.getRouter("r105").joinBgpCluster(AS3_WEST_CLUSTER_ID)
+    for router in AS3_WEST_CLIENTS:
+        as3.getRouter(router).joinBgpCluster(AS3_WEST_CLUSTER_ID)
     as3.getRouter("r103").joinBgpCluster(AS3_EAST_CLUSTER_ID).makeRouteReflector()
-    as3.getRouter("r104").joinBgpCluster(AS3_EAST_CLUSTER_ID)
+    for router in AS3_EAST_CLIENTS:
+        as3.getRouter(router).joinBgpCluster(AS3_EAST_CLUSTER_ID)
 
     Makers.makeStubAsWithHosts(emu, base, 150, 100, hosts_per_as)
     Makers.makeStubAsWithHosts(emu, base, 151, 100, hosts_per_as)

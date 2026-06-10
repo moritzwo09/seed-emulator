@@ -22,6 +22,7 @@ on:
           - A03b
           - A05
           - A06
+          - A62
           - B00
           - B02
           - B31
@@ -96,6 +97,8 @@ jobs:
             examples/basic/A05_components/test_runtime.py \
             examples/basic/A06_merge_emulation/merge_emulation.py \
             examples/basic/A06_merge_emulation/test_runtime.py \
+            examples/basic/A62_route_reflector/route_reflector.py \
+            examples/basic/A62_route_reflector/test_runtime.py \
             examples/internet/B00_mini_internet/mini_internet.py \
             examples/internet/B00_mini_internet/test_runtime.py \
             examples/internet/B02_mini_internet_with_dns/mini_internet_with_dns.py \
@@ -112,6 +115,7 @@ jobs:
           python seedemu/testing/cli.py clean examples/basic/A03b_from_real_world/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A05_components/example.yaml
           python seedemu/testing/cli.py clean examples/basic/A06_merge_emulation/example.yaml
+          python seedemu/testing/cli.py clean examples/basic/A62_route_reflector/example.yaml
           python seedemu/testing/cli.py clean examples/internet/B00_mini_internet/example.yaml
           python seedemu/testing/cli.py clean examples/internet/B02_mini_internet_with_dns/example.yaml
           python seedemu/testing/cli.py clean examples/internet/B31_mini_internet_mpls/example.yaml
@@ -154,6 +158,10 @@ jobs:
             category: basic
             requires_mpls: false
             manifest: examples/basic/A06_merge_emulation/example.yaml
+          - code: A62
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A62_route_reflector/example.yaml
           - code: B00
             category: internet
             requires_mpls: false
@@ -249,6 +257,10 @@ jobs:
             category: basic
             requires_mpls: false
             manifest: examples/basic/A06_merge_emulation/example.yaml
+          - code: A62
+            category: basic
+            requires_mpls: false
+            manifest: examples/basic/A62_route_reflector/example.yaml
           - code: B00
             category: internet
             requires_mpls: false
