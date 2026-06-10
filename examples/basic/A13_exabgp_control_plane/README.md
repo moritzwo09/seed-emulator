@@ -20,11 +20,14 @@ renders for that router.
 - `AS180/exabgp` is a host on `ix100` at `10.100.0.180`.
 - `AS180/exabgp` announces `198.51.100.0/24` to `AS2/router0`.
 
-## Build
+## Test Runner
 
 ```bash
-PYTHONPATH=. python3 examples/basic/A13_exabgp_control_plane/exabgp_control_plane.py
+python3 -m seedemu.testing.cli clean examples/basic/A13_exabgp_control_plane/example.yaml
+python3 -m seedemu.testing.cli compile examples/basic/A13_exabgp_control_plane/example.yaml
+python3 -m seedemu.testing.cli build examples/basic/A13_exabgp_control_plane/example.yaml
+COMPOSE_PROJECT_NAME=seedemu-a13 python3 -m seedemu.testing.cli all examples/basic/A13_exabgp_control_plane/example.yaml
 ```
 
-Runtime validation should check `/etc/exabgp/exabgp.conf` on the speaker and the
-generated BGP peer on `AS2/router0`.
+The runtime test checks `/etc/exabgp/exabgp.conf`, the ExaBGP process, IX100
+reachability, and the generated BGP peer on `AS2/router0`.

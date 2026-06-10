@@ -294,12 +294,12 @@ class Routing(Layer):
 
     def _render_bird_control_plane(self, rnode: Router):
         sessions = get_bgp_sessions(rnode)
+        self._render_bird_ospf(rnode)
         if sessions or has_bgp_connected_export(rnode):
             include_tables = not sessions or any(not session["route_server_client"] for session in sessions)
             ensure_bird_bgp_base(rnode, include_tables=include_tables)
         for session in sessions:
             rnode.addProtocol('bgp', session["name"], render_bird_protocol_body(session))
-        self._render_bird_ospf(rnode)
 
     def _render_frr_connected_export(self, router: Router) -> Tuple[str, bool]:
         prefixes: List[str] = []

@@ -14,6 +14,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+try:
+    from .compose import docker_compose_command
+except ImportError:
+    from compose import docker_compose_command
+
 
 class TestRunnerError(Exception):
     """Raised when a test runner manifest or lifecycle operation is invalid."""
@@ -117,7 +122,7 @@ class TestRunner:
             self.log("compose file not found: {}".format(compose))
             return 1
 
-        cmd = ["docker", "compose", "-f", str(compose), "build"]
+        cmd = docker_compose_command() + ["-f", str(compose), "build"]
         return self.run_command(
             "build",
             cmd,
@@ -134,7 +139,7 @@ class TestRunner:
             self.log("compose file not found: {}".format(compose))
             return 1
 
-        cmd = ["docker", "compose", "-f", str(compose), "up", "-d"]
+        cmd = docker_compose_command() + ["-f", str(compose), "up", "-d"]
         result = self.run_command("up", cmd, cwd=compose.parent, env=self.docker_env())
         if result.returncode != 0:
             return result.returncode
@@ -148,7 +153,7 @@ class TestRunner:
             self.log("compose file not found, skipping down: {}".format(compose))
             return 0
 
-        cmd = ["docker", "compose", "-f", str(compose), "down", "--remove-orphans"]
+        cmd = docker_compose_command() + ["-f", str(compose), "down", "--remove-orphans"]
         return self.run_command("down", cmd, cwd=compose.parent, env=self.docker_env()).returncode
 
     def readiness(self) -> int:
@@ -290,8 +295,7 @@ class TestRunner:
         result = self.run_command(
             "probe-{}".format(self.slug(probe["name"])),
             [
-                "docker",
-                "compose",
+                *docker_compose_command(),
                 "-f",
                 str(compose),
                 "exec",
@@ -344,7 +348,7 @@ class TestRunner:
         compose = self.compose_file()
         result = self.run_command(
             "probe-{}".format(self.slug(probe["name"])),
-            ["docker", "compose", "-f", str(compose), "ps", "--format", "json"],
+            docker_compose_command() + ["-f", str(compose), "ps", "--format", "json"],
             cwd=compose.parent,
             env=self.docker_env(),
             timeout=int(probe.get("timeout", 30)),
@@ -380,7 +384,7 @@ class TestRunner:
         compose = self.compose_file()
         result = self.run_command(
             "probe-{}".format(self.slug(probe["name"])),
-            ["docker", "compose", "-f", str(compose), "logs", str(probe["service"])],
+            docker_compose_command() + ["-f", str(compose), "logs", str(probe["service"])],
             cwd=compose.parent,
             env=self.docker_env(),
             timeout=int(probe.get("timeout", 30)),

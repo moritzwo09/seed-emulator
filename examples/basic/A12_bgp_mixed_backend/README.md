@@ -19,11 +19,14 @@ The default router backend remains BIRD. Only routers created with
 - `AS151/router0` uses FRR.
 - `AS152/router0` uses the default BIRD backend.
 
-## Build
+## Test Runner
 
 ```bash
-PYTHONPATH=. python3 examples/basic/A12_bgp_mixed_backend/bgp_mixed_backend.py
+python3 -m seedemu.testing.cli clean examples/basic/A12_bgp_mixed_backend/example.yaml
+python3 -m seedemu.testing.cli compile examples/basic/A12_bgp_mixed_backend/example.yaml
+python3 -m seedemu.testing.cli build examples/basic/A12_bgp_mixed_backend/example.yaml
+COMPOSE_PROJECT_NAME=seedemu-a12 python3 -m seedemu.testing.cli all examples/basic/A12_bgp_mixed_backend/example.yaml
 ```
 
-Runtime validation should check that FRR routers have `/etc/frr/frr.conf` and no
-`bird -d` startup command, while BIRD routers still render `/etc/bird/bird.conf`.
+The runtime test checks backend-specific daemons, generated config, BGP session
+state, and learned route state on BIRD and FRR routers.

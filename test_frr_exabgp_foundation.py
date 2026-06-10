@@ -130,6 +130,9 @@ def test_frr_backend_renders_frr_config_for_selected_router():
     assert not any(cmd == "bird -d" for cmd, _ in r2.getStartCommands())
     assert _file_content(r2, "/etc/bird/bird.conf") == ""
 
+    r1_bird_conf = _file_content(r1, "/etc/bird/bird.conf")
+    assert r1_bird_conf.index("ipv4 table t_ospf") < r1_bird_conf.index("protocol bgp ibgp1")
+
     frr_conf = _file_content(r2, "/etc/frr/frr.conf")
     assert "router bgp 2" in frr_conf
     assert "neighbor 10.101.0.152 remote-as 152" in frr_conf
