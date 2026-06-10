@@ -23,6 +23,7 @@ DISPLAY_LABEL = META_PREFIX + "displayname"
 ETH_NODE_ID_LABEL = META_PREFIX + "ethereum.node_id"
 ETH_ROLE_LABEL = META_PREFIX + "ethereum.role"
 ETH_CONSENSUS_LABEL = META_PREFIX + "ethereum.consensus"
+ETH_CHAIN_ID_LABEL = META_PREFIX + "ethereum.chain_id"
 
 DEFAULT_TRANSFER_RECIPIENT = "0x1000000000000000000000000000000000000001"
 
@@ -453,7 +454,17 @@ class EthereumRuntimeTest(ComposeRuntimeTest):
         receipt_retries: int = 90,
         timeout: int = 180,
     ) -> Dict[str, object]:
-        script = self._transfer_script(to_address, value_wei, password, receipt_retries)
+        try:
+            script = self._signed_raw_transfer_script(
+                service,
+                to_address=to_address,
+                value_wei=value_wei,
+                password=password,
+                receipt_retries=receipt_retries,
+            )
+        except Exception as exc:
+            return self._record_runtime_result(name, service, "prepare signed Ethereum transaction", 1, "", str(exc))
+
         result = self.geth_eval(service, script, timeout=timeout)
         stdout = str(result["stdout"])
         stderr = str(result["stderr"])
@@ -510,10 +521,22 @@ class EthereumRuntimeTest(ComposeRuntimeTest):
     def _extract_json(text: str) -> Dict[str, Any]:
         for line in reversed(text.splitlines()):
             line = line.strip()
-            if line.startswith("{") and line.endswith("}"):
-                data = json.loads(line)
-                if isinstance(data, dict):
-                    return data
+            if not line:
+                continue
+            candidates = [line]
+            if line.startswith('"') and line.endswith('"'):
+                try:
+                    decoded = json.loads(line)
+                except json.JSONDecodeError:
+                    decoded = None
+                if isinstance(decoded, str):
+                    candidates.insert(0, decoded)
+            for candidate in candidates:
+                candidate = candidate.strip()
+                if candidate.startswith("{") and candidate.endswith("}"):
+                    data = json.loads(candidate)
+                    if isinstance(data, dict):
+                        return data
         raise ValueError("could not find JSON object in geth output")
 
     @staticmethod
@@ -532,17 +555,153 @@ class EthereumRuntimeTest(ComposeRuntimeTest):
         if sender_delta < value_wei:
             raise ValueError("sender delta {} is smaller than transfer value {}".format(sender_delta, value_wei))
 
+    def _signed_raw_transfer_script(
+        self,
+        service: ComposeService | str,
+        *,
+        to_address: str,
+        value_wei: int,
+        password: str,
+        receipt_retries: int,
+    ) -> str:
+        try:
+            from eth_account import Account
+        except ImportError as exc:
+            raise RuntimeError("eth_account is required to sign Ethereum runtime test transactions") from exc
+
+        state = self._local_account_transaction_state(service)
+        sender = str(state["sender"])
+        private_key = self._private_key_for_local_account(service, sender, password)
+        account = Account.from_key(private_key)
+        if account.address.lower() != sender.lower():
+            raise RuntimeError("decrypted key {} does not match local geth account {}".format(account.address, sender))
+
+        transaction = {
+            "chainId": self._chain_id_for_service(service),
+            "nonce": self._rpc_int(state["nonce"]),
+            "gas": 21000,
+            "gasPrice": self._rpc_int(state["gasPrice"]),
+            "to": to_address,
+            "value": int(value_wei),
+            "data": b"",
+        }
+        signed = Account.sign_transaction(transaction, private_key)
+        raw_transaction = getattr(signed, "rawTransaction", None)
+        if raw_transaction is None:
+            raw_transaction = getattr(signed, "raw_transaction")
+        raw_transaction_hex = raw_transaction.hex()
+        if not raw_transaction_hex.startswith("0x"):
+            raw_transaction_hex = "0x" + raw_transaction_hex
+
+        return self._send_raw_transfer_script(sender, to_address, raw_transaction_hex, receipt_retries)
+
+    def _local_account_transaction_state(self, service: ComposeService | str) -> Dict[str, Any]:
+        result = self.geth_eval(service, self._transaction_state_script())
+        if result["exit"] != 0:
+            raise RuntimeError(result["stderr"] or result["stdout"] or "failed to inspect local geth account")
+        return self._extract_json(str(result["stdout"]))
+
+    def _private_key_for_local_account(self, service: ComposeService | str, sender: str, password: str) -> str:
+        try:
+            from eth_account import Account
+        except ImportError as exc:
+            raise RuntimeError("eth_account is required to decrypt geth keystore files") from exc
+
+        passwords = [password]
+        password_result = self.exec(service, "cat /tmp/eth-password 2>/dev/null || true", timeout=30)
+        for item in str(password_result["stdout"]).splitlines():
+            candidate = item.strip()
+            if candidate and candidate not in passwords:
+                passwords.append(candidate)
+
+        paths = self._local_keystore_paths(service)
+        errors: List[str] = []
+        for path_item in paths:
+            result = self.exec(service, "cat {}".format(shlex.quote(path_item)), timeout=30)
+            if result["exit"] != 0:
+                errors.append("{}: {}".format(path_item, result["stderr"] or result["stdout"]))
+                continue
+            try:
+                keyfile = json.loads(str(result["stdout"]))
+            except json.JSONDecodeError as exc:
+                errors.append("{}: invalid keystore JSON: {}".format(path_item, exc))
+                continue
+            for candidate_password in passwords:
+                try:
+                    key = Account.decrypt(keyfile, candidate_password)
+                    private_key = key.hex()
+                    if not private_key.startswith("0x"):
+                        private_key = "0x" + private_key
+                    account = Account.from_key(private_key)
+                except Exception as exc:
+                    errors.append("{}: decrypt failed: {}".format(path_item, exc))
+                    continue
+                if account.address.lower() == sender.lower():
+                    return private_key
+
+        detail = "; ".join(errors[-3:]) if errors else "no readable keystore files"
+        raise RuntimeError("could not decrypt local geth account {}: {}".format(sender, detail))
+
+    def _local_keystore_paths(self, service: ComposeService | str) -> List[str]:
+        command = (
+            'for dir in /root/.ethereum/keystore /tmp/keystore; do '
+            '[ -d "$dir" ] && find "$dir" -maxdepth 1 -type f -print; '
+            "done | sort -u"
+        )
+        result = self.exec(service, command, timeout=30)
+        if result["exit"] != 0:
+            raise RuntimeError(result["stderr"] or result["stdout"] or "failed to list geth keystore files")
+        paths = [line.strip() for line in str(result["stdout"]).splitlines() if line.strip()]
+        if not paths:
+            raise RuntimeError("no geth keystore files found in local account directories")
+        return paths
+
+    def _chain_id_for_service(self, service: ComposeService | str) -> int:
+        if isinstance(service, ComposeService):
+            chain_id = service.labels.get(ETH_CHAIN_ID_LABEL)
+            if chain_id is not None:
+                return self._rpc_int(chain_id)
+
+        result = self.geth_eval(
+            service,
+            "JSON.stringify({chainId: admin.nodeInfo.protocols.eth.config.chainId})",
+            timeout=30,
+        )
+        if result["exit"] != 0:
+            raise RuntimeError(result["stderr"] or result["stdout"] or "failed to inspect Ethereum chain id")
+        return self._rpc_int(self._extract_json(str(result["stdout"]))["chainId"])
+
     @staticmethod
-    def _transfer_script(to_address: str, value_wei: int, password: str, receipt_retries: int) -> str:
-        script = """
+    def _rpc_int(value: object) -> int:
+        if isinstance(value, int):
+            return value
+        text = str(value).strip()
+        if text.startswith(("0x", "0X")):
+            return int(text, 16)
+        return int(text)
+
+    @staticmethod
+    def _transaction_state_script() -> str:
+        return """
 var sender = eth.accounts[0];
 if (!sender) { throw new Error("no local geth account"); }
-var recipient = "__TO_ADDRESS__";
-var value = web3.toBigNumber("__VALUE_WEI__");
-personal.unlockAccount(sender, "__PASSWORD__", 120);
+var nonce = eth.getTransactionCount(sender);
+var gasPrice = eth.gasPrice;
+JSON.stringify({
+  sender: sender,
+  nonce: nonce && nonce.toString ? nonce.toString(10) : String(nonce),
+  gasPrice: gasPrice && gasPrice.toString ? gasPrice.toString(10) : String(gasPrice)
+})
+""".strip()
+
+    @staticmethod
+    def _send_raw_transfer_script(sender: str, to_address: str, raw_transaction: str, receipt_retries: int) -> str:
+        script = """
+var sender = __SENDER__;
+var recipient = __RECIPIENT__;
 var senderBefore = eth.getBalance(sender);
 var recipientBefore = eth.getBalance(recipient);
-var txHash = eth.sendTransaction({from: sender, to: recipient, value: value});
+var txHash = eth.sendRawTransaction(__RAW_TRANSACTION__);
 var receipt = null;
 for (var i = 0; i < __RECEIPT_RETRIES__; i++) {
   receipt = eth.getTransactionReceipt(txHash);
@@ -555,8 +714,8 @@ JSON.stringify({
   sender: sender,
   recipient: recipient,
   txHash: txHash,
-  receiptBlockNumber: receipt === null ? null : receipt.blockNumber,
-  receiptStatus: receipt === null ? null : receipt.status,
+  receiptBlockNumber: receipt === null ? null : receipt.blockNumber.toString(10),
+  receiptStatus: receipt === null || receipt.status === null ? null : receipt.status.toString(10),
   senderBefore: senderBefore.toString(10),
   senderAfter: senderAfter.toString(10),
   recipientBefore: recipientBefore.toString(10),
@@ -565,7 +724,8 @@ JSON.stringify({
   recipientDelta: recipientAfter.minus(recipientBefore).toString(10)
 })
 """.strip()
-        script = script.replace("__TO_ADDRESS__", to_address)
-        script = script.replace("__VALUE_WEI__", str(value_wei))
-        script = script.replace("__PASSWORD__", password)
-        return script.replace("__RECEIPT_RETRIES__", str(int(receipt_retries)))
+        script = script.replace("__SENDER__", json.dumps(sender))
+        script = script.replace("__RECIPIENT__", json.dumps(to_address))
+        script = script.replace("__RAW_TRANSACTION__", json.dumps(raw_transaction))
+        script = script.replace("__RECEIPT_RETRIES__", str(receipt_retries))
+        return script
