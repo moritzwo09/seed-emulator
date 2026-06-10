@@ -29,6 +29,13 @@ ETHEREUM_IMAGE_POS = DockerImage(name='handsonsecurity/seedemu-ethereum:pos2.0',
 
 MONERO_IMAGE = DockerImage(name='handsonsecurity/seedemu-monero:latest', software=[], subset=BASE_IMAGE)
 
+# Agave (Solana) is packaged in a local seedemu-solana image built from
+# docker_images/seedemu-solana. The Dockerfile downloads the pinned upstream
+# amd64 bundle and builds the same pinned version from source on arm64.
+# Build it once before compiling a Solana emulation:
+#   docker build -t seedemu-solana docker_images/seedemu-solana
+SOLANA_IMAGE = DockerImage(name='seedemu-solana', software=[], local=False, subset=BASE_IMAGE)
+
 OP_STACK_IMAGE = DockerImage(name='huagluck/seedemu-op-stack', software=[], subset=BASE_IMAGE)
 
 SC_DEPLOYER_IMAGE = DockerImage(name='huagluck/seedemu-sc-deployer', software=[], subset=BASE_IMAGE)
@@ -41,12 +48,12 @@ UBUNTU_IMAGE_ARM64   = DockerImage(name='ubuntu:20.04',
                                 software=[],
                                 subset=None)
 
-BASE_IMAGE_ARM64     = DockerImage(name='handsonsecurity/seedemu-multiarch-base:buildx-latest',
+BASE_IMAGE_ARM64     = DockerImage(name='handsonsecurity/seedemu-base:2.0',
                                 software=['zsh', 'curl', 'nano', 'vim-nox', 'mtr-tiny', 'iproute2',
                                         'iputils-ping', 'tcpdump', 'termshark', 'dnsutils', 'jq', 'ipcalc', 'netcat-openbsd'],
                                 subset=UBUNTU_IMAGE_ARM64)
 
-ROUTER_IMAGE_ARM64   = DockerImage(name='handsonsecurity/seedemu-multiarch-router:buildx-latest',
+ROUTER_IMAGE_ARM64   = DockerImage(name='handsonsecurity/seedemu-router:2.0',
                                 software=['bird2'],
                                 subset=BASE_IMAGE_ARM64)
 
@@ -64,6 +71,10 @@ ETHEREUM_IMAGE_ARM64_POS = DockerImage(name='handsonsecurity/seedemu-ethereum:po
 
 MONERO_IMAGE_ARM64 = DockerImage(name='handsonsecurity/seedemu-monero:latest', software=[], subset=BASE_IMAGE_ARM64)
 
+# The same local image name is used for arm64; its Dockerfile builds Agave from
+# source because upstream release bundles are amd64-only.
+SOLANA_IMAGE_ARM64 = DockerImage(name='seedemu-solana', software=[], local=False, subset=BASE_IMAGE_ARM64)
+
 OP_STACK_IMAGE_ARM64 = DockerImage(name='huagluck/seedemu-op-stack', software=[], subset=BASE_IMAGE_ARM64)
 
 SC_DEPLOYER_IMAGE_ARM64 = DockerImage(name='huagluck/seedemu-sc-deployer', software=[], subset=BASE_IMAGE_ARM64)
@@ -80,6 +91,7 @@ BASESYSTEM_DOCKERIMAGE_MAPPING = {
         BaseSystem.SEEDEMU_ETHEREUM_LEGACY:       ETHEREUM_IMAGE_LEGACY,
         BaseSystem.SEEDEMU_ETHEREUM_POS:       ETHEREUM_IMAGE_POS,
         BaseSystem.SEEDEMU_MONERO:        MONERO_IMAGE,
+        BaseSystem.SEEDEMU_SOLANA:        SOLANA_IMAGE,
         BaseSystem.SEEDEMU_OP_STACK:       OP_STACK_IMAGE,
         BaseSystem.SEEDEMU_SC_DEPLOYER:    SC_DEPLOYER_IMAGE,
         BaseSystem.SEEDEMU_CHAINLINK:      CHAINLINK_IMAGE
@@ -93,6 +105,7 @@ BASESYSTEM_ARM64_DOCKERIMAGE_MAPPING = {
         BaseSystem.SEEDEMU_ETHEREUM_LEGACY:       ETHEREUM_IMAGE_ARM64_LEGACY,
         BaseSystem.SEEDEMU_ETHEREUM_POS:       ETHEREUM_IMAGE_ARM64_POS,
         BaseSystem.SEEDEMU_MONERO:        MONERO_IMAGE_ARM64,
+        BaseSystem.SEEDEMU_SOLANA:        SOLANA_IMAGE_ARM64,
         BaseSystem.SEEDEMU_OP_STACK:    OP_STACK_IMAGE_ARM64,
         BaseSystem.SEEDEMU_SC_DEPLOYER: SC_DEPLOYER_IMAGE_ARM64,
         BaseSystem.SEEDEMU_CHAINLINK:   CHAINLINK_IMAGE_ARM64
