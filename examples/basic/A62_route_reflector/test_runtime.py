@@ -21,7 +21,7 @@ from seedemu.testing import ComposeRuntimeTest, ComposeService
 from seedemu.testing.runtime import ADDRESS_LABEL, ASN_LABEL, NODE_LABEL
 
 
-EXPECTED_BORDER_ROUTER_COUNT = 27
+EXPECTED_ROUTER_COUNT = 31
 
 BIRD_PROTOCOL_HEALTH_COMMAND = (
     "birdc show protocols | awk '"
@@ -41,12 +41,12 @@ RR_IBGP_NAME_COMMAND = (
 )
 
 
-def discover_border_routers(test: ComposeRuntimeTest) -> List[ComposeService]:
-    """Return generated brdnode services sorted by AS and node name."""
+def discover_routers(test: ComposeRuntimeTest) -> List[ComposeService]:
+    """Return generated router services sorted by AS and node name."""
     services: List[ComposeService] = []
 
     for name, service in test.compose.get("services", {}).items():
-        if not str(name).startswith("brdnode_"):
+        if not (str(name).startswith("brdnode_") or str(name).startswith("rnode_")):
             continue
 
         labels = dict(service.get("labels", {}))
@@ -70,14 +70,14 @@ def service_label(service: ComposeService) -> str:
 def main() -> int:
     test = ComposeRuntimeTest(__file__)
 
-    border_routers = discover_border_routers(test)
+    routers = discover_routers(test)
     test.structural_check(
-        "A62 generates all border router services",
-        len(border_routers) == EXPECTED_BORDER_ROUTER_COUNT,
-        "found {} brdnode services".format(len(border_routers)),
+        "A62 generates all router services",
+        len(routers) == EXPECTED_ROUTER_COUNT,
+        "found {} router services".format(len(routers)),
     )
 
-    for router in border_routers:
+    for router in routers:
         test.exec_check(
             "{} BIRD protocols are healthy".format(service_label(router)),
             router,
@@ -92,6 +92,10 @@ def main() -> int:
         (3, "r103"),
         (3, "r104"),
         (3, "r105"),
+        (3, "r110"),
+        (3, "r111"),
+        (3, "r112"),
+        (3, "r113"),
         (12, "r101"),
         (12, "r104"),
     ]
