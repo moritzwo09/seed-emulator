@@ -1,12 +1,11 @@
-# seedemu-solana base image (multi-arch)
+# seedemu-solana base image
 #
 # Ships the Agave validator toolchain (the production Solana client maintained by
 # Anza, successor to the original solana-labs validator) so that SolanaService
 # nodes can run a real, self-contained Solana cluster inside the emulator.
 #
-# Built on handsonsecurity/seedemu-multiarch-base:buildx-latest, the same
-# multi-arch base the rest of the emulation uses, so amd64 and arm64 are both
-# first-class.
+# Built on handsonsecurity/seedemu-base:2.0, the same base image used by
+# the standard Docker compiler defaults.
 #
 # Design note (PRINCIPLES.md P5 "real production software, pinned version"):
 # the Agave version is pinned for reproducibility. Binaries are obtained per
@@ -33,9 +32,9 @@ ARG SOLANA_VERSION=v2.2.14
 ARG SOLANA_SHA256_AMD64=b5dadeb39ab7f31062c599ead459b9d809dd9d709365df6cb5943828b7693b36
 
 # ---------------------------------------------------------------------------
-# Common multi-arch base (same image the rest of the emulation uses).
+# Common base image (same image the standard Docker compiler defaults use).
 # ---------------------------------------------------------------------------
-FROM handsonsecurity/seedemu-multiarch-base:buildx-latest AS base
+FROM handsonsecurity/seedemu-base:2.0 AS base
 
 # ---------------------------------------------------------------------------
 # amd64: download the official pre-built release into /out.
@@ -108,7 +107,7 @@ RUN set -eux; \
 FROM build-${TARGETARCH} AS binaries
 
 # ---------------------------------------------------------------------------
-# Final runtime image: the multi-arch base + the selected Agave binaries.
+# Final runtime image: the SEED base + the selected Agave binaries.
 # ---------------------------------------------------------------------------
 FROM base
 ARG DEBIAN_FRONTEND=noninteractive
