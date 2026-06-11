@@ -253,6 +253,7 @@ class Node(Printable, Registrable, Configurable, Vertex, Customizable):
 
         self.__interfaces = []
         self.__files = {}
+        self.__runtime_files = {}
         self.__imported_files = {}
         self.__asn = asn
         self.__role = role
@@ -707,6 +708,25 @@ class Node(Printable, Registrable, Configurable, Vertex, Customizable):
         """
         return self.__files.values()
 
+    def getRuntimeFile(self, path: str) -> File:
+        """!
+        @brief Get a runtime file object, and create if not exist.
+
+        @param path file path.
+        @returns file.
+        """
+        if path in self.__runtime_files: return self.__runtime_files[path]
+        self.__runtime_files[path] = File(path)
+        return self.__runtime_files[path]
+
+    def getRuntimeFiles(self) -> List[File]:
+        """!
+        @brief Get all runtime files.
+
+        @return list of runtime files.
+        """
+        return self.__runtime_files.values()
+
     def setFile(self, path: str, content: str) -> Node:
         """!
         @brief Set content of the file.
@@ -720,6 +740,45 @@ class Node(Printable, Registrable, Configurable, Vertex, Customizable):
         self.getFile(path).setContent(content)
 
         return self
+
+    def addBuildFile(self, path: str, content: str) -> Node:
+        """!
+        @brief Set content of a build-time file.
+
+        @param path path of the file.
+        @param content file content.
+
+        @returns self, for chaining API calls.
+        """
+        return self.setFile(path, content)
+
+    def addRuntimeFile(self, path: str, content: str) -> Node:
+        """!
+        @brief Set content of a runtime file.
+
+        Runtime files are bind mounted by Docker compiler runtime-mount mode.
+        When that mode is disabled, they are copied into the image like regular
+        files.
+
+        @param path path of the file.
+        @param content file content.
+
+        @returns self, for chaining API calls.
+        """
+        self.getRuntimeFile(path).setContent(content)
+
+        return self
+
+    def setRuntimeFile(self, path: str, content: str) -> Node:
+        """!
+        @brief Set content of a runtime file.
+
+        @param path path of the file.
+        @param content file content.
+
+        @returns self, for chaining API calls.
+        """
+        return self.addRuntimeFile(path, content)
 
     def appendFile(self, path: str, content: str) -> Node:
         """!
@@ -1028,6 +1087,10 @@ class Node(Printable, Registrable, Configurable, Vertex, Customizable):
         for file in node.getFiles():
             (path, content) = file.get()
             self.setFile(path, content)
+
+        for file in node.getRuntimeFiles():
+            (path, content) = file.get()
+            self.setRuntimeFile(path, content)
 
 
     def print(self, indent: int) -> str:

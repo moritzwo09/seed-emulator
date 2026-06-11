@@ -50,6 +50,7 @@ class DistributedDocker(Docker):
         {primaryIp}
         """
         super().__init__(namingScheme= namingScheme)
+        self.setRuntimeMountMode(False)
 
     def getName(self) -> str:
         return 'DistributedDocker'
