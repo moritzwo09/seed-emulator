@@ -1,4 +1,4 @@
-# A13 ExaBGP Control Plane
+# A13 ExaBGP
 
 `A13` installs ExaBGP as a SEED service speaker through `ExaBgpService` and
 `Binding`.
@@ -59,10 +59,10 @@ COMPOSE_FILE=/path/to/docker-compose.yml EXABGP_SERVICE=hnode_180_exabgp sh ./ex
 ## Test Runner
 
 ```bash
-python3 -m seedemu.testing.cli clean examples/basic/A13_exabgp_control_plane/example.yaml
-python3 -m seedemu.testing.cli compile examples/basic/A13_exabgp_control_plane/example.yaml
-python3 -m seedemu.testing.cli build examples/basic/A13_exabgp_control_plane/example.yaml
-COMPOSE_PROJECT_NAME=seedemu-a13 python3 -m seedemu.testing.cli all examples/basic/A13_exabgp_control_plane/example.yaml
+python3 -m seedemu.testing.cli clean examples/basic/A13_exabgp/example.yaml
+python3 -m seedemu.testing.cli compile examples/basic/A13_exabgp/example.yaml
+python3 -m seedemu.testing.cli build examples/basic/A13_exabgp/example.yaml
+COMPOSE_PROJECT_NAME=seedemu-a13 python3 -m seedemu.testing.cli all examples/basic/A13_exabgp/example.yaml
 ```
 
 The runtime test checks `/etc/exabgp/exabgp.conf`, the ExaBGP process, IX100

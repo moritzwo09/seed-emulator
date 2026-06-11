@@ -1,8 +1,8 @@
-id: basic-a13-exabgp-control-plane
-name: ExaBGP Control Plane Service
+id: basic-a13-exabgp
+name: ExaBGP Service
 description: A router-facing ExaBGP service speaker installed with Service and Binding APIs.
 runner: internet
-script: exabgp_control_plane.py
+script: exabgp.py
 platform: amd
 features:
   - ipv4-default
@@ -27,7 +27,7 @@ build:
 runtime:
   compose: output/docker-compose.yml
   readiness:
-    - name: A13 ExaBGP service topology is running
+    - name: A13 ExaBGP topology is running
       type: compose-ps
       services:
         - brdnode_2_router0
@@ -45,6 +45,6 @@ probes:
     interval: 3
 
 test_programs:
-  - name: A13 ExaBGP service runtime validation
+  - name: A13 ExaBGP runtime validation
     script: test_runtime.py
     timeout: 240
