@@ -555,28 +555,15 @@ rm -f "${tmpfile}.stage2"
 
     def _stage_base_image_contexts(self) -> None:
         used_images = sorted(getattr(self, "_used_images", set()))
-        repo_root = Path(__file__).resolve().parents[2]
-        base_image_sources = {
-            "handsonsecurity/seedemu-multiarch-base:buildx-latest": os.path.join(
-                repo_root, "docker_images", "multiarch", "seedemu-base"
-            ),
-            "handsonsecurity/seedemu-multiarch-router:buildx-latest": os.path.join(
-                repo_root, "docker_images", "multiarch", "seedemu-router"
-            ),
-        }
+        if os.path.isdir("base_images"):
+            shutil.rmtree("base_images")
+        if not used_images:
+            return
 
-        staged_any = False
         for image in used_images:
-            src = base_image_sources.get(image)
-            if not src or not os.path.isdir(src):
-                continue
             digest = md5(image.encode("utf-8")).hexdigest()
             dst_root = os.path.join("base_images", digest)
-            os.makedirs(os.path.dirname(dst_root), exist_ok=True)
-            if os.path.exists(dst_root):
-                shutil.rmtree(dst_root)
-            shutil.copytree(src, dst_root)
-            staged_any = True
-
-        if not staged_any and os.path.isdir("base_images"):
-            shutil.rmtree("base_images")
+            os.makedirs(dst_root, exist_ok=True)
+            dockerfile = os.path.join(dst_root, "Dockerfile")
+            with open(dockerfile, "w", encoding="utf-8") as handle:
+                handle.write(f"FROM {image}\n")
