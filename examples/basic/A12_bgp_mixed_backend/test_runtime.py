@@ -48,7 +48,7 @@ def main() -> int:
         test.exec_check(
             "AS2 r2 iBGP session is established",
             as2_r2,
-            "vtysh -c 'show ip bgp summary' | grep -Eq '10\\.0\\.0\\.1[[:space:]].*[[:space:]][0-9]+$'",
+            "vtysh -c 'show bgp ipv4 unicast neighbors 10.0.0.1' | grep -q 'BGP state = Established'",
         )
         test.exec_check("AS2 r2 learns AS151 route", as2_r2, "vtysh -c 'show ip bgp' | grep -q '10.151.0.0/24'")
         test.exec_check("AS2 r2 does not start BIRD", as2_r2, "! pgrep -x bird >/dev/null")
