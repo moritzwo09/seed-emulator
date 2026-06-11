@@ -29,12 +29,9 @@ ETHEREUM_IMAGE_POS = DockerImage(name='handsonsecurity/seedemu-ethereum:pos2.0',
 
 MONERO_IMAGE = DockerImage(name='handsonsecurity/seedemu-monero:latest', software=[], subset=BASE_IMAGE)
 
-# Agave (Solana) is packaged in a local seedemu-solana image built from
-# docker_images/seedemu-solana. The Dockerfile downloads the pinned upstream
-# amd64 bundle and builds the same pinned version from source on arm64.
-# Build it once before compiling a Solana emulation:
-#   docker build -t seedemu-solana docker_images/seedemu-solana
-SOLANA_IMAGE = DockerImage(name='seedemu-solana', software=[], local=False, subset=BASE_IMAGE)
+# Agave (Solana) is packaged as a multiarch image. The image contains the
+# pinned upstream binaries for amd64 and arm64 from docker_images/seedemu-solana.
+SOLANA_IMAGE = DockerImage(name='handsonsecurity/seedemu-solana:1.0', software=[], local=False, subset=BASE_IMAGE)
 
 OP_STACK_IMAGE = DockerImage(name='huagluck/seedemu-op-stack', software=[], subset=BASE_IMAGE)
 
@@ -71,9 +68,8 @@ ETHEREUM_IMAGE_ARM64_POS = DockerImage(name='handsonsecurity/seedemu-ethereum:po
 
 MONERO_IMAGE_ARM64 = DockerImage(name='handsonsecurity/seedemu-monero:latest', software=[], subset=BASE_IMAGE_ARM64)
 
-# The same local image name is used for arm64; its Dockerfile builds Agave from
-# source because upstream release bundles are amd64-only.
-SOLANA_IMAGE_ARM64 = DockerImage(name='seedemu-solana', software=[], local=False, subset=BASE_IMAGE_ARM64)
+# The same multiarch Solana image is used for arm64.
+SOLANA_IMAGE_ARM64 = DockerImage(name='handsonsecurity/seedemu-solana:1.0', software=[], local=False, subset=BASE_IMAGE_ARM64)
 
 OP_STACK_IMAGE_ARM64 = DockerImage(name='huagluck/seedemu-op-stack', software=[], subset=BASE_IMAGE_ARM64)
 
