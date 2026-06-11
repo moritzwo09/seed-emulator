@@ -26,10 +26,16 @@ def main() -> int:
 
     if speaker:
         test.exec_check("ExaBGP speaker process is running", speaker, "pgrep -f 'exabgp /etc/exabgp/exabgp.conf' >/dev/null")
+        test.exec_check("ExaBGP manual control FIFO is available", speaker, "test -p /run/exabgp/manual.in")
         test.exec_check(
             "ExaBGP config peers with AS2 router",
             speaker,
             "grep -q 'neighbor 10.100.0.2' /etc/exabgp/exabgp.conf",
+        )
+        test.exec_check(
+            "ExaBGP config enables manual-control process",
+            speaker,
+            "grep -q 'processes \\[ manual-control \\]' /etc/exabgp/exabgp.conf",
         )
         test.exec_check(
             "ExaBGP config announces static IPv4 route",

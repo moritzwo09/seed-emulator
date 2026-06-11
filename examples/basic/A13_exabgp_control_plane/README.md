@@ -20,6 +20,42 @@ renders for that router.
 - `AS180/exabgp` is a host on `ix100` at `10.100.0.180`.
 - `AS180/exabgp` announces `198.51.100.0/24` to `AS2/router0`.
 
+## Manual BGP Updates
+
+The ExaBGP service also creates a manual control FIFO inside the ExaBGP
+container:
+
+```text
+/run/exabgp/manual.in
+```
+
+Use `exabgpctl.sh` from this directory to send live BGP updates after the
+emulator is running:
+
+```bash
+sh ./exabgpctl.sh announce 203.0.113.0/24 self
+sh ./exabgpctl.sh withdraw 203.0.113.0/24 self
+```
+
+You can also send a raw ExaBGP command:
+
+```bash
+sh ./exabgpctl.sh command "announce route 203.0.113.0/24 next-hop self"
+```
+
+To inspect ExaBGP logs:
+
+```bash
+sh ./exabgpctl.sh log
+```
+
+The script defaults to `output/docker-compose.yml` and service
+`hnode_180_exabgp`. Override them if needed:
+
+```bash
+COMPOSE_FILE=/path/to/docker-compose.yml EXABGP_SERVICE=hnode_180_exabgp sh ./exabgpctl.sh announce 203.0.113.0/24 self
+```
+
 ## Test Runner
 
 ```bash
@@ -30,4 +66,5 @@ COMPOSE_PROJECT_NAME=seedemu-a13 python3 -m seedemu.testing.cli all examples/bas
 ```
 
 The runtime test checks `/etc/exabgp/exabgp.conf`, the ExaBGP process, IX100
-reachability, and the generated BGP peer on `AS2/router0`.
+reachability, the manual control FIFO, and the generated BGP peer on
+`AS2/router0`.

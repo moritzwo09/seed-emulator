@@ -11,6 +11,11 @@ from seedemu.layers._bgp_metadata import install_router_bgp_session
 ExaBgpFileTemplates: Dict[str, str] = {}
 
 ExaBgpFileTemplates["config"] = """\
+process manual-control {{
+  run /bin/sh -c "mkdir -p /run/exabgp; mkfifo /run/exabgp/manual.in 2>/dev/null || true; chmod 666 /run/exabgp/manual.in; tail -f /run/exabgp/manual.in";
+  encoder text;
+}}
+
 {neighbor_blocks}
 """
 
@@ -160,6 +165,9 @@ class ExaBgpServer(Server):
                     "  peer-as {peer_asn};\n"
                     "  family {{\n"
                     "    ipv4 unicast;\n"
+                    "  }}\n"
+                    "  api {{\n"
+                    "    processes [ manual-control ];\n"
                     "  }}\n"
                     "{static_block}"
                     "}}\n"
