@@ -250,7 +250,7 @@ compiling the Docker output.
 ```python
 docker = Docker(
         internetMapEnabled=True,
-        etherViewEnabled=True,
+        etherViewEnabled=ether_view_enabled,
         platform=platform)
 emu.compile(docker, output, override=True)
 ```
@@ -258,6 +258,13 @@ emu.compile(docker, output, override=True)
 The Internet Map shows the emulated Internet topology. The Eth Explorer
 shows the Ethereum PoS chain state, including slots, epochs, blocks,
 validators, and execution-layer transactions.
+
+`ether_view_enabled` is controlled by command-line options. It is enabled by
+default for manual runs, and can be disabled for CI:
+
+```bash
+python3 ethereum_pos.py --no-ether-view
+```
 
 
 ## How to Run
@@ -294,6 +301,10 @@ Arguments:
 - `arm`: Generate Docker configuration for ARM64 hosts.
 - `--platform amd|arm`: Standard test-framework platform argument.
 - `--output DIR`: Standard test-framework output directory argument.
+- `--ether-view`: Enable Eth Explorer output. This is the default for manual
+  runs.
+- `--no-ether-view`: Disable Eth Explorer output. The test manifest uses this
+  option for CI.
 
 Startup may take some time. The Geth nodes, Beacon nodes, Validator
 Clients, Beacon Setup node, Faucet, Utility Server, Internet Map, and

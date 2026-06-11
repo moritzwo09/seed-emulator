@@ -26,6 +26,7 @@ on:
           - B00
           - B02
           - B31
+          - D01
       run-basic-examples:
         description: "Run selected basic examples"
         type: boolean
@@ -33,6 +34,11 @@ on:
         default: true
       run-internet-examples:
         description: "Run selected internet examples"
+        type: boolean
+        required: false
+        default: true
+      run-blockchain-examples:
+        description: "Run selected blockchain examples"
         type: boolean
         required: false
         default: true
@@ -50,6 +56,7 @@ env:
   SELECTED_EXAMPLE: ${{ github.event.inputs['selected-example'] || 'all' }}
   RUN_BASIC_EXAMPLES: ${{ github.event.inputs['run-basic-examples'] || 'true' }}
   RUN_INTERNET_EXAMPLES: ${{ github.event.inputs['run-internet-examples'] || 'true' }}
+  RUN_BLOCKCHAIN_EXAMPLES: ${{ github.event.inputs['run-blockchain-examples'] || 'true' }}
   RUN_FULL_LIFECYCLE: ${{ github.event.inputs['run-full-lifecycle'] || 'true' }}
 
 jobs:
@@ -104,7 +111,9 @@ jobs:
             examples/internet/B02_mini_internet_with_dns/mini_internet_with_dns.py \
             examples/internet/B02_mini_internet_with_dns/test_runtime.py \
             examples/internet/B31_mini_internet_mpls/mini_internet_mpls.py \
-            examples/internet/B31_mini_internet_mpls/test_runtime.py
+            examples/internet/B31_mini_internet_mpls/test_runtime.py \
+            examples/blockchain/D01_ethereum_pos/ethereum_pos.py \
+            examples/blockchain/D01_ethereum_pos/test_runtime.py
 
       - name: Validate selected example manifests
         run: |
@@ -119,6 +128,7 @@ jobs:
           python seedemu/testing/cli.py clean examples/internet/B00_mini_internet/example.yaml
           python seedemu/testing/cli.py clean examples/internet/B02_mini_internet_with_dns/example.yaml
           python seedemu/testing/cli.py clean examples/internet/B31_mini_internet_mpls/example.yaml
+          python seedemu/testing/cli.py clean examples/blockchain/D01_ethereum_pos/example.yaml
 
   compile-selected-examples:
     name: Compile ${{ matrix.example.code }}
@@ -174,6 +184,10 @@ jobs:
             category: internet
             requires_mpls: true
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
+          - code: D01
+            category: blockchain
+            requires_mpls: false
+            manifest: examples/blockchain/D01_ethereum_pos/example.yaml
     steps:
       - name: Check out the source repository
         uses: actions/checkout@v5
@@ -195,7 +209,8 @@ jobs:
             (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
-              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true') ||
+              (matrix.example.category == 'blockchain' && env.RUN_BLOCKCHAIN_EXAMPLES == 'true')
             )
           }}
         run: |
@@ -211,7 +226,8 @@ jobs:
             (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
-              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true') ||
+              (matrix.example.category == 'blockchain' && env.RUN_BLOCKCHAIN_EXAMPLES == 'true')
             )
           }}
         uses: actions/upload-artifact@v6
@@ -273,6 +289,10 @@ jobs:
             category: internet
             requires_mpls: true
             manifest: examples/internet/B31_mini_internet_mpls/example.yaml
+          - code: D01
+            category: blockchain
+            requires_mpls: false
+            manifest: examples/blockchain/D01_ethereum_pos/example.yaml
     steps:
       - name: Check out the source repository
         uses: actions/checkout@v5
@@ -297,7 +317,8 @@ jobs:
             (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
-              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true') ||
+              (matrix.example.category == 'blockchain' && env.RUN_BLOCKCHAIN_EXAMPLES == 'true')
             )
           }}
         run: |
@@ -322,7 +343,8 @@ jobs:
             (env.SELECTED_EXAMPLE == 'all' || env.SELECTED_EXAMPLE == matrix.example.code) &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
-              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true') ||
+              (matrix.example.category == 'blockchain' && env.RUN_BLOCKCHAIN_EXAMPLES == 'true')
             )
           }}
         run: |
@@ -336,7 +358,8 @@ jobs:
             (!matrix.example.requires_mpls || steps.mpls.outputs.available == 'true') &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
-              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true') ||
+              (matrix.example.category == 'blockchain' && env.RUN_BLOCKCHAIN_EXAMPLES == 'true')
             )
           }}
         run: |
@@ -354,7 +377,8 @@ jobs:
             (!matrix.example.requires_mpls || steps.mpls.outputs.available == 'true') &&
             (
               (matrix.example.category == 'basic' && env.RUN_BASIC_EXAMPLES == 'true') ||
-              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true')
+              (matrix.example.category == 'internet' && env.RUN_INTERNET_EXAMPLES == 'true') ||
+              (matrix.example.category == 'blockchain' && env.RUN_BLOCKCHAIN_EXAMPLES == 'true')
             )
           }}
         uses: actions/upload-artifact@v6
