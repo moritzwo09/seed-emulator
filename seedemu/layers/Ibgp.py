@@ -4,6 +4,8 @@ from .Base import Base
 from seedemu.core import ScopedRegistry, Node, Graphable, Emulator, Layer
 from typing import Dict, List, Set, Tuple
 from ._bgp_metadata import install_router_bgp_session
+
+
 class Ibgp(Layer, Graphable):
     """!
     @brief The Ibgp (iBGP) layer.
@@ -115,9 +117,6 @@ class Ibgp(Layer, Graphable):
                     continue
 
                 rr_node = routers_map[rr_name]
-                rr_node.addTable('t_bgp')
-                rr_node.addTablePipe('t_bgp')
-                rr_node.addTablePipe('t_direct', 't_bgp')
                 rr_address = rr_node.getLoopbackAddress()
 
                 for client_name in sorted(client_names):

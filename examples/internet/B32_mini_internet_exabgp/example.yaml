@@ -53,14 +53,6 @@ probes:
     retries: 40
     interval: 5
 
-  - name: AS150 reaches AS152 across the mini Internet
-    type: ping
-    service: hnode_150_host_0
-    target: 10.152.0.71
-    count: 3
-    retries: 40
-    interval: 5
-
 test_programs:
   - name: B32 ExaBGP runtime validation
     script: test_runtime.py

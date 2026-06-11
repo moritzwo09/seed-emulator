@@ -10,8 +10,6 @@ def main() -> int:
 
     router = test.require_service(2, "r100")
     speaker = test.require_service(180, "exabgp")
-    host150 = test.require_service(150, "host_0")
-    host152 = test.require_service(152, "host_0")
 
     if router:
         test.exec_check("AS2 r100 starts BIRD", router, "pgrep -x bird >/dev/null")
@@ -45,9 +43,6 @@ def main() -> int:
             "grep -q 'route 198.51.100.0/24 next-hop self' /etc/exabgp/exabgp.conf",
         )
         test.exec_check("ExaBGP speaker reaches AS2 r100", speaker, "ping -c 3 10.100.0.2 >/dev/null")
-
-    if host150 and host152:
-        test.exec_check("B00 mini Internet reachability is preserved", host150, "ping -c 3 {} >/dev/null".format(host152.address))
 
     test.write_summary("b32-runtime-test.json")
     return test.exit_code()

@@ -142,6 +142,40 @@ def test_frr_backend_renders_frr_config_for_selected_router():
     assert "interface net0" in frr_conf
 
 
+def test_route_reflector_intent_renders_without_direct_ibgp_bird_writes():
+    emu = Emulator()
+    base = Base()
+    routing = Routing()
+    ospf = Ospf()
+    ibgp = Ibgp()
+
+    as2 = base.createAutonomousSystem(2)
+    as2.createNetwork("net0")
+    as2.createBgpCluster("10.2.0.1")
+    as2.createRouter("rr").joinNetwork("net0").joinBgpCluster("10.2.0.1").makeRouteReflector()
+    as2.createRouter("client").joinNetwork("net0").joinBgpCluster("10.2.0.1")
+
+    emu.addLayer(base)
+    emu.addLayer(routing)
+    emu.addLayer(ospf)
+    emu.addLayer(ibgp)
+    emu.render()
+
+    rr = emu.getRegistry().get("2", "rnode", "rr")
+    client = emu.getRegistry().get("2", "rnode", "client")
+
+    rr_conf = _file_content(rr, "/etc/bird/bird.conf")
+    client_conf = _file_content(client, "/etc/bird/bird.conf")
+
+    assert "protocol bgp Ibgp_rr_client_client" in rr_conf
+    assert "passive yes" in rr_conf
+    assert "rr client" in rr_conf
+    assert "rr cluster id 10.2.0.1" in rr_conf
+    assert "protocol bgp Ibgp_rr_rr" in client_conf
+    assert "next hop self" in client_conf
+    assert rr_conf.index("ipv4 table t_ospf") < rr_conf.index("protocol bgp Ibgp_rr_client_client")
+
+
 def test_exabgp_service_renders_speaker_and_router_peer():
     emu = Emulator()
     base = Base()
