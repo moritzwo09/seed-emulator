@@ -20,6 +20,23 @@ renders for that router.
 - `AS180/exabgp` is a host on `ix100` at `10.100.0.180`.
 - `AS180/exabgp` announces `198.51.100.0/24` to `AS2/router0`.
 
+The ExaBGP peer is declared by IX and AS number:
+
+```python
+exabgp_speaker = exabgp.install("as180_exabgp").setLocalAsn(180)
+# Prefer IX-based peering: the service resolves the AS2 router on IX100 automatically.
+exabgp_speaker.addPeer(ix=100, peer_asn=2, router_relationship="customer")
+# Use router-based peering when multiple AS2 routers share IX100 and one must be selected explicitly.
+# exabgp_speaker.addPeerByRouter("router0", router_asn=2, router_relationship="customer")
+exabgp_speaker.addAnnouncement("198.51.100.0/24")
+```
+
+The active `addPeer()` call is the preferred form for most examples. It says
+that AS180 should peer with AS2 at IX100, and the service finds the AS2 router
+attached to that IX. The commented `addPeerByRouter()` form is useful when the
+target AS has more than one router on the same IX and the example needs to
+choose a specific one.
+
 ## Manual BGP Updates
 
 The ExaBGP service also creates a manual control FIFO inside the ExaBGP

@@ -3,7 +3,7 @@ from __future__ import annotations
 from ipaddress import ip_network
 from typing import Dict, List, Optional, Tuple
 
-from seedemu.core import Emulator, Node, ScopedRegistry, Server, Service
+from seedemu.core import Emulator, Network, Node, ScopedRegistry, Server, Service
 from seedemu.layers.Routing import Router
 from seedemu.layers._bgp_metadata import install_router_bgp_session
 
@@ -61,21 +61,49 @@ class ExaBgpServer(Server):
 
     def attachToRouter(self, router_name: str, router_asn: Optional[int] = None) -> "ExaBgpServer":
         self.__peers = []
-        self.addPeer(router_name, router_asn=router_asn)
+        self.addPeerByRouter(router_name, router_asn=router_asn)
         return self
 
     def addPeer(
+        self,
+        ix: int,
+        peer_asn: Optional[int] = None,
+        session_name: Optional[str] = None,
+        router_relationship: str = "customer",
+        router_asn: Optional[int] = None,
+    ) -> "ExaBgpServer":
+        if isinstance(ix, str):
+            return self.addPeerByRouter(
+                ix,
+                router_asn=router_asn if router_asn is not None else peer_asn,
+                session_name=session_name,
+                router_relationship=router_relationship,
+            )
+
+        assert peer_asn is not None, "peer_asn is required for IX-based ExaBGP peering"
+        relationship = self._normalize_relationship(router_relationship)
+        self.__peers.append(
+            {
+                "type": "ix",
+                "ix": int(ix),
+                "peer_asn": int(peer_asn),
+                "session_name": str(session_name).strip() if session_name is not None else None,
+                "router_relationship": relationship,
+            }
+        )
+        return self
+
+    def addPeerByRouter(
         self,
         router_name: str,
         router_asn: Optional[int] = None,
         session_name: Optional[str] = None,
         router_relationship: str = "customer",
     ) -> "ExaBgpServer":
-        relationship = str(router_relationship or "customer").strip().lower() or "customer"
-        if relationship not in {"customer", "peer", "provider", "unfiltered"}:
-            raise ValueError("unsupported router relationship: {}".format(router_relationship))
+        relationship = self._normalize_relationship(router_relationship)
         self.__peers.append(
             {
+                "type": "router",
                 "router_name": str(router_name),
                 "router_asn": int(router_asn) if router_asn is not None else None,
                 "session_name": str(session_name).strip() if session_name is not None else None,
@@ -83,6 +111,12 @@ class ExaBgpServer(Server):
             }
         )
         return self
+
+    def _normalize_relationship(self, router_relationship: str) -> str:
+        relationship = str(router_relationship or "customer").strip().lower() or "customer"
+        if relationship not in {"customer", "peer", "provider", "unfiltered"}:
+            raise ValueError("unsupported router relationship: {}".format(router_relationship))
+        return relationship
 
     def _relationship_params(self, relationship: str) -> Tuple[Optional[str], Optional[int], str]:
         if relationship == "customer":
@@ -93,7 +127,48 @@ class ExaBgpServer(Server):
             return "PROVIDER_COMM", 10, "local_and_customer"
         return None, None, "all"
 
-    def _resolve_peer(self, node: Node, peer: Dict[str, object]) -> Tuple[Router, str, str]:
+    def _resolve_ix_net(self, ix: int) -> Network:
+        assert self.__emulator is not None, "ExaBgpServer not bound to emulator"
+        ix_scope = ScopedRegistry("ix", self.__emulator.getRegistry())
+        ix_name = "ix{}".format(ix)
+        assert ix_scope.has("net", ix_name), "IX{} not found for ExaBGP peer".format(ix)
+        return ix_scope.get("net", ix_name)
+
+    def _resolve_ix_peer(self, node: Node, peer: Dict[str, object]) -> Tuple[Router, str, str]:
+        assert self.__emulator is not None, "ExaBgpServer not bound to emulator"
+        ix = int(peer["ix"])
+        peer_asn = int(peer["peer_asn"])
+        ix_net = self._resolve_ix_net(ix)
+
+        local_address: Optional[str] = None
+        for iface in node.getInterfaces():
+            if iface.getNet() == ix_net:
+                local_address = str(iface.getAddress())
+                break
+
+        assert local_address is not None, (
+            "ExaBGP node as{}/{} is not connected to IX{}".format(node.getAsn(), node.getName(), ix)
+        )
+
+        scope = ScopedRegistry(str(peer_asn), self.__emulator.getRegistry())
+        candidates: List[Tuple[Router, str]] = []
+        for router in scope.getByType("rnode"):
+            assert isinstance(router, Router)
+            for iface in router.getInterfaces():
+                if iface.getNet() == ix_net:
+                    candidates.append((router, str(iface.getAddress())))
+                    break
+
+        assert candidates, "cannot resolve ExaBGP peer: AS{} is not connected to IX{}".format(peer_asn, ix)
+        assert len(candidates) == 1, (
+            "cannot resolve ExaBGP peer: AS{} has multiple routers on IX{}: {}. "
+            "Use addPeerByRouter(...) to choose one explicitly."
+        ).format(peer_asn, ix, ", ".join(router.getName() for router, _addr in candidates))
+
+        router, peer_address = candidates[0]
+        return router, local_address, peer_address
+
+    def _resolve_router_peer(self, node: Node, peer: Dict[str, object]) -> Tuple[Router, str, str]:
         assert self.__emulator is not None, "ExaBgpServer not bound to emulator"
         router_asn = int(peer["router_asn"]) if peer.get("router_asn") is not None else node.getAsn()
         scope = ScopedRegistry(str(router_asn), self.__emulator.getRegistry())
@@ -113,6 +188,11 @@ class ExaBgpServer(Server):
                 node.getAsn(), node.getName(), router.getAsn(), router.getName()
             )
         )
+
+    def _resolve_peer(self, node: Node, peer: Dict[str, object]) -> Tuple[Router, str, str]:
+        if peer.get("type") == "ix":
+            return self._resolve_ix_peer(node, peer)
+        return self._resolve_router_peer(node, peer)
 
     def configureOnNode(self, node: Node):
         assert self.__peers, "ExaBgpServer requires at least one peer"
