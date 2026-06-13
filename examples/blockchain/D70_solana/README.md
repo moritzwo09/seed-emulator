@@ -9,35 +9,27 @@ The example mirrors the structure of [`D60_monero`](../D60_monero): build a base
 Internet, attach the blockchain service, bind its virtual nodes to hosts,
 render, and compile to Docker.
 
-> **Platform note.** The cluster runs **natively on both amd64 and arm64**. The
-> `seedemu-solana` base image downloads Agave's official prebuilt binaries on
-> amd64, and (since Anza ships no arm64 Linux binaries) compiles the same pinned
-> version from source on arm64. The arm64 source build is slow the first time
-> (tens of minutes) but is cached afterward.
+> **Platform note.** Agave publishes pre-built binaries for **x86_64 (amd64)
+> only**. On Apple Silicon / arm64 hosts the cluster runs under `linux/amd64`
+> emulation (slower, but functional).
 
 ## What gets built
 
 `solana_basic.py` builds a 10-stub-AS Internet (via `Makers`) and a private
-Solana cluster of ten nodes:
+Solana cluster of three nodes:
 
 | Virtual node          | Role                | AS  | Host    |
 | --------------------- | ------------------- | --- | ------- |
 | `sol-boot-150`        | bootstrap validator | 150 | host_0  |
 | `sol-validator-150b`  | validator           | 150 | host_1  |
 | `sol-validator-151`   | validator           | 151 | host_0  |
-| `sol-validator-152`   | validator           | 152 | host_0  |
-| `sol-validator-153`   | validator           | 153 | host_0  |
-| `sol-validator-154`   | validator           | 154 | host_0  |
-| `sol-validator-160`   | validator           | 160 | host_0  |
-| `sol-validator-161`   | validator           | 161 | host_0  |
-| `sol-validator-162`   | validator           | 162 | host_0  |
-| `sol-validator-163`   | validator           | 163 | host_0  |
 
 - The **bootstrap validator** creates the genesis ledger with `solana-genesis`,
   stakes itself, runs `solana-faucet`, and is the gossip entrypoint.
-- The **same-AS validator** (AS150/host_1) joins over the local network.
-- The **cross-AS validators** join over inter-domain (BGP) routing,
-  demonstrating a larger cluster that spans the emulated Internet.
+- The **same-AS validator** (AS150/host_1) joins over the local network — the
+  most direct path, so it converges reliably on any host.
+- The **cross-AS validator** (AS151) joins over inter-domain (BGP) routing,
+  demonstrating a cluster that spans the emulated Internet.
 
 Each validator waits for the bootstrap RPC, generates its own identity and vote
 keypairs, funds its identity with an airdrop (relayed through the bootstrap
@@ -48,58 +40,43 @@ All addresses (each node's own IP, and the bootstrap's gossip/RPC endpoint) are
 resolved from the virtual-node bindings at render time — nothing is hard-coded
 in the service (see the design notes below).
 
+## Prerequisites
+
+Build the Solana base image once (ships the pinned Agave binaries):
+
+```bash
+docker build -t seedemu-solana ../../../docker_images/seedemu-solana
+```
+
 ## Build and run
 
-If you are at the repository root, enter this example directory first:
-
 ```bash
-cd examples/blockchain/D70_solana
-```
+# 1. Generate the emulation (amd64 platform)
+python3 solana_basic.py amd
 
-Prepare the emulation first. This builds the Solana base image, generates the
-SEED output, builds the local Docker images, starts all containers, and leaves
-the cluster running for inspection:
-
-```bash
-./prepare_solana.sh
-```
-
-The equivalent manual flow, from this directory, is:
-
-```bash
-# 1. Build the Solana base image
-docker build -t seedemu-solana ../../../docker_images/seedemu-solana
-
-# 2. Generate the emulation (defaults to the host architecture; or pass amd|arm)
-python3 solana_basic.py
-
-# 3. Build and start the cluster
+# 2. Build and start the cluster
 cd output
 # Build the local base images first. seedemu node images do `FROM <digest>`,
 # where each base image is built by a "dummy" service (one per file under
 # output/dummies/). docker compose v2 builds in parallel, so build these first:
 docker compose build $(ls dummies)
 docker compose up -d --build
+
+# 3. Watch it converge (give it a couple of minutes the first time)
 ```
 
-Give the cluster a couple of minutes to converge the first time. Tear it down
-only when you are done:
-
-```bash
-(cd output && docker compose down -v --remove-orphans)
-```
+The simplest path is to just run `./test_solana.sh` (below), which handles the
+build ordering for you.
 
 ## Interacting and verifying
 
 The bootstrap validator's RPC listens on port `8899` inside the emulated
 network. The cluster is not port-mapped to the host, so query it by exec-ing
-into the bootstrap container (AS150 / host_0). Resolve the container from
-`docker ps` each time you start a new shell, because container ids change when
-Docker recreates containers:
+into the bootstrap container (AS150 / host_0):
 
 ```bash
-BOOT=$(docker ps --format '{{.Names}}' | grep '^as150h-Solana-Bootstrap-150-' | head -n 1)
-test -n "$BOOT" || { echo "bootstrap container is not running"; exit 1; }
+# Find the bootstrap container
+BOOT=$(docker ps --format '{{.ID}} {{.Names}}' | grep hnode_150_host_0 | awk '{print $1}')
 
 # Cluster software version (proves RPC is up)
 docker exec "$BOOT" solana --url http://127.0.0.1:8899 cluster-version
@@ -111,7 +88,7 @@ docker exec "$BOOT" solana --url http://127.0.0.1:8899 block-height
 # Epoch info (slot, epoch, absolute slot, transaction count)
 docker exec "$BOOT" solana --url http://127.0.0.1:8899 epoch-info
 
-# Validators in the cluster (should list up to ten once converged)
+# Validators in the cluster (should list all three once converged)
 docker exec "$BOOT" solana --url http://127.0.0.1:8899 validators
 
 # Nodes seen over gossip
@@ -121,112 +98,26 @@ docker exec "$BOOT" solana --url http://127.0.0.1:8899 gossip
 Raw JSON-RPC also works (e.g. `getSlot`, `getBlockHeight`, `getEpochInfo`):
 
 ```bash
-docker exec "$BOOT" sh -c \
-  'curl -sS --connect-timeout 3 http://127.0.0.1:8899 \
-     -X POST -H "Content-Type: application/json" \
-     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getSlot\"}";
-   echo'
+docker exec "$BOOT" bash -lc \
+  'curl -s http://127.0.0.1:8899 -X POST -H "Content-Type: application/json" \
+     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getSlot\"}"'
 ```
-
-## Send transactions
-
-Use the helper script instead of typing a long `docker exec` command. It finds
-the bootstrap container, creates Alice/Bob keypairs on the first run, airdrops
-SOL to Alice, transfers SOL to Bob, confirms the signature, and prints the final
-balances:
-
-```bash
-python3 send_transaction.py
-```
-
-You can change the airdrop and transfer amount:
-
-```bash
-python3 send_transaction.py --airdrop 20 --amount 2
-```
-
-By default, later runs reuse the same Alice/Bob keypairs, so Bob's balance
-increases each time. Start over with fresh accounts when needed:
-
-```bash
-python3 send_transaction.py --reset
-```
-
-If Alice is running out of SOL, top her up before the transfer:
-
-```bash
-python3 send_transaction.py --top-up --airdrop 10
-```
-
-Check the latest Alice/Bob balances created by the demo:
-
-```bash
-python3 show_balances.py
-```
-
-The script still reaches the RPC through the bootstrap container because this
-example does not expose port `8899` on the host. The important Solana flow is
-unchanged: Alice's keypair signs the transfer, the RPC receives the signed
-transaction, the validator pipeline forwards it to a leader, and the leader
-records it in a produced block.
-
-## Deploy a program
-
-Solana smart contracts are called **programs**. Deploying a program means
-uploading a compiled SBF shared object (`.so`) to a program account. The
-`seedemu-solana` runtime image contains the validator and Solana CLI; it does
-not contain the Rust/SBF compiler. Build the program outside the emulator, then
-copy the resulting `.so` into the bootstrap container for deployment.
-
-This example includes a minimal Rust program at
-`programs/noop_logger`. The program logs its program id, account count, and
-instruction data length whenever it is invoked.
-
-If your host already has the Solana/Agave SBF toolchain, build and deploy in one
-step:
-
-```bash
-python3 deploy_program.py --build
-```
-
-If you already built the `.so`, deploy it directly:
-
-```bash
-python3 deploy_program.py --so programs/noop_logger/dist/seedemu_solana_noop.so
-```
-
-The script copies the `.so` into the bootstrap container, creates/funds a
-deployer account, runs `solana program deploy`, extracts the program id, and
-prints `solana program show`.
-
-What happened during deployment:
-- The deployer keypair signs the deployment transactions and pays fees/rent.
-- The CLI uploads the SBF bytes into program-data accounts controlled by the
-  upgradeable loader.
-- The loader marks the final program account executable.
-- After that, any Solana client can send an instruction addressed to the program
-  id; validators execute the program while processing that transaction.
-- Calling a custom program requires a client that constructs an instruction for
-  that program id; the Solana CLI manages deployment but does not provide a
-  generic `program invoke` subcommand.
 
 ## Automated test
 
-`test_solana.sh` verifies an already-running cluster. It does **not** build
-images, generate the emulation, start containers, recreate containers, or tear
-anything down. Run `./prepare_solana.sh` first, then run:
+`test_solana.sh` builds the base image, generates the emulation, brings the
+cluster up, and asserts that the chain produces blocks (slots advance) and that
+the validators register in the cluster, then tears everything down:
 
 ```bash
-./test_solana.sh                   # verify the running cluster
-MIN_VALIDATORS=1 ./test_solana.sh  # accept a single voting validator
-MIN_VALIDATORS=10 ./test_solana.sh # require all ten validators to be voting
+./test_solana.sh                # full build + verify + teardown
+KEEP_UP=1 ./test_solana.sh      # verify, then leave the cluster running
+./test_solana.sh --down         # tear down a previous run
 ```
 
 ## Logs and troubleshooting
 
 ```bash
-BOOT=$(docker ps --format '{{.Names}}' | grep '^as150h-Solana-Bootstrap-150-' | head -n 1)
-
 # Validator log (bootstrap)
 docker exec "$BOOT" tail -n 100 -f /opt/solana/config/bootstrap-validator/*.log
 
@@ -234,7 +125,7 @@ docker exec "$BOOT" tail -n 100 -f /opt/solana/config/bootstrap-validator/*.log
 docker exec "$BOOT" cat /var/log/solana-faucet.log
 
 # On a joining validator (AS151)
-V=$(docker ps --format '{{.Names}}' | grep '^as151h-Solana-Validator-151-' | head -n 1)
+V=$(docker ps --format '{{.ID}} {{.Names}}' | grep hnode_151_host_0 | awk '{print $1}')
 docker exec "$V" tail -n 100 -f /opt/solana/config/validator/*.log
 ```
 
@@ -243,14 +134,15 @@ Notes:
   then validators fetch genesis/snapshots over gossip and create vote accounts.
 - A single staked validator already advances slots, so block production is
   visible even before the other validators finish joining.
-- Solana validators are CPU/IO intensive (see PRINCIPLES.md P9 on scale being a
-  real, resource-bounded concern). Give Docker ample CPU/RAM for larger clusters.
-- The cluster runs natively on amd64 and arm64, so all ten Solana nodes
-  (including the cross-AS ones) converge on either architecture once BGP
-  converges. (Running the amd64 image under emulation on an arm64 host is
-  **not** recommended: the emulated validator binary cannot complete
-  non-loopback connects, which blocks the joining validators — build the native
-  arm64 image instead.)
+- Solana validators are CPU/IO intensive; under arm64 emulation expect slower
+  slot times. For larger clusters, prefer an amd64 host (see PRINCIPLES.md P9 on
+  scale being a real, resource-bounded concern).
+- **Inter-AS convergence under emulation:** on a native amd64 host all three
+  nodes (including the cross-AS one) join. When the whole stack runs under
+  `linux/amd64` emulation (e.g. Apple Silicon), the emulated kernel's rtnetlink
+  layer can be flaky, which delays inter-domain data-plane convergence; the
+  bootstrap and the same-AS validator (on-link) still converge reliably, so
+  multi-validator consensus is demonstrable everywhere.
 
 ## Ports
 
