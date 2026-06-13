@@ -5,13 +5,12 @@ from seedemu.core.enums import NodeRole, NetworkType
 from .DockerImage import DockerImage
 from .DockerImageConstant import *
 from typing import Dict, Generator, List, Set, Tuple
-from hashlib import md5, sha256
+from hashlib import md5
 from functools import cmp_to_key
-from os import chmod, chdir, environ, makedirs, mkdir, walk
-from os import path as ospath
+from os import mkdir, chdir
 from re import sub
 from ipaddress import IPv4Network, IPv4Address
-from shutil import copyfile, move, rmtree
+from shutil import copyfile
 import json
 from yaml import dump
 
@@ -130,33 +129,6 @@ DockerCompilerFileTemplates['depends_on'] = """\
 DockerCompilerFileTemplates['compose_service'] = """\
     {nodeId}:
         build: ./{nodeId}
-        container_name: {nodeName}
-        depends_on:
-            - {dependsOn}
-        cap_add:
-            - ALL
-{sysctls}
-        privileged: true
-        networks:
-{networks}{ports}{volumes}
-        labels:
-{labelList}
-        environment:
-        {environment}
-"""
-
-DockerCompilerFileTemplates['compose_runtime_image'] = """\
-    {serviceId}:
-        build: ./runtime-images/{recipeHash}
-        image: {imageName}
-        command: ["sh", "-c", "tail -f /dev/null"]
-        depends_on:
-            - {dependsOn}
-"""
-
-DockerCompilerFileTemplates['compose_service_runtime_mount'] = """\
-    {nodeId}:
-        image: {imageName}
         container_name: {nodeName}
         depends_on:
             - {dependsOn}
@@ -533,7 +505,6 @@ class Docker(Compiler):
         etherViewEnabled: bool = False,
         etherViewPort: int = 5000,
         clientHideServiceNet: bool = True,
-        runtimeMount: bool = False,
         option_handling: OptionHandling = OptionHandling.CREATE_SEPARATE_ENV_FILE
     ):
         """!
@@ -568,9 +539,6 @@ class Docker(Compiler):
         @param etherViewPort (optional) set seedemu EtherView port. Default to 5000.
         @param clientHideServiceNet (optional) hide service network for the
         client map by not adding metadata on the net. Default to True.
-        @param runtimeMount (optional) mount node-specific runtime files from
-        the output directory and share identical build recipe images. Default to
-        False.
         """
         self.__option_handling = option_handling
         self.__networks = ""
@@ -587,9 +555,6 @@ class Docker(Compiler):
         self.__ether_view_port = etherViewPort
 
         self.__client_hide_svcnet = clientHideServiceNet
-        runtime_mount_env = environ.get('SEEDEMU_DOCKER_RUNTIME_MOUNT', '').lower()
-        self.__runtime_mount = runtimeMount or runtime_mount_env in ['1', 'true', 'yes', 'on']
-        self.__runtime_images = {}
 
         self.__images = {}
         self.__forced_image = None
@@ -613,18 +578,6 @@ class Docker(Compiler):
             if name == BaseSystem.DEFAULT:
                 priority = 1
             self.addImage(image, priority=priority)
-
-    def setRuntimeMountMode(self, enabled: bool = True) -> Docker:
-        """!
-        @brief Enable or disable runtime-mount mode.
-
-        @param enabled set runtime-mount mode enabled if True.
-
-        @returns self, for chaining api calls.
-        """
-        self.__runtime_mount = enabled
-
-        return self
 
     def _addVolume(self, vol: BaseVolume):
         """! @brief add a docker volume/bind mount/or tmpfs
@@ -1150,19 +1103,17 @@ class Docker(Compiler):
             )
         return node_nets, dummy_addr_map
 
-    def _getComposeNodeVolumes(self, node: Node, runtime_mounts: List[BaseVolume] = None) -> str:
+    def _getComposeNodeVolumes(self, node: Node) -> str:
         """ compute the docker-compose 'volumes:' section for this service(emulation node)"""
 
         volumes = ''
         # svcvols = map( lambda vol: ServiceLvlVolume(vol), node.getCustomVolumes() )
         svcvols = list (set(node.getDockerVolumes() ))
-        if runtime_mounts != None:
-            svcvols += runtime_mounts
         for v in svcvols:
             v.mode = 'service'
         yamlvols = '\n'.join(map( lambda line: '        ' + line ,dump( svcvols ).split('\n') ) )
 
-        volumes +='        volumes:\n' + yamlvols if len(svcvols) > 0 else   ''
+        volumes +='        volumes:\n' + yamlvols if len(node.getDockerVolumes()) > 0 else   ''
 
 
         # the top-level docker-compose volumes section is rendered at a later stage ..
@@ -1172,122 +1123,13 @@ class Docker(Compiler):
 
         return volumes
 
-    def _normalizeContainerPath(self, path: str) -> str:
-        """!
-        @brief Normalize a Docker container path to absolute form.
-        """
-        return path if path.startswith('/') else '/{}'.format(path)
-
-    def _isRuntimeChmodCommand(self, cmd: str, runtime_paths: Set[str]) -> bool:
-        """!
-        @brief Return True if cmd only marks runtime-mounted files executable.
-        """
-        stripped = cmd.strip()
-        if any(token in stripped for token in ['&&', ';', '||', '|']):
-            return False
-
-        parts = stripped.split()
-        if len(parts) < 3 or parts[0] != 'chmod':
-            return False
-
-        mode = parts[1]
-        if '+x' not in mode and mode not in ['755', '0755']:
-            return False
-
-        paths = set()
-        for part in parts[2:]:
-            if part.startswith('-'):
-                continue
-            paths.add(self._normalizeContainerPath(part))
-
-        return len(paths) > 0 and paths.issubset(runtime_paths)
-
-    def _fileUsedByBuildCommand(self, node: Node, path: str) -> bool:
-        """!
-        @brief Return True if a node file must remain in the build context.
-        """
-        normalized = self._normalizeContainerPath(path)
-        candidates = {normalized, normalized.lstrip('/')}
-        commands = node.getDockerCommands() + node.getBuildCommands() + node.getBuildCommandsAtEnd()
-        for cmd in commands:
-            if self._isRuntimeChmodCommand(cmd, {normalized}):
-                continue
-            if any(candidate != '' and candidate in cmd for candidate in candidates):
-                return True
-
-        return False
-
-    def _shouldMountRuntimeFile(self, node: Node, path: str, explicit_runtime: bool = False) -> bool:
-        """!
-        @brief Return True if a file should be emitted as a runtime bind mount.
-        """
-        if not self.__runtime_mount:
-            return False
-        if explicit_runtime:
-            return True
-
-        return not self._fileUsedByBuildCommand(node, path)
-
-    def _runtimeFileIsExecutable(self, path: str, content: str) -> bool:
-        """!
-        @brief Return True if a runtime file should be executable on the host.
-        """
-        basename = path.rstrip('/').split('/')[-1]
-        executable_names = {
-            'start.sh',
-            'interface_setup',
-            'seedemu_worker',
-            'seedemu_sniffer',
-            'replace_address.sh',
-        }
-
-        return content.startswith('#!') or basename in executable_names
-
-    def _addRuntimeFile(self, node_id: str, path: str, content: str, runtime_mounts: List[BaseVolume]) -> str:
-        """!
-        @brief Stage a runtime file under output/runtime and add a bind mount.
-        """
-        target = self._normalizeContainerPath(path)
-        relpath = target.lstrip('/')
-        assert '..' not in relpath.split('/'), 'runtime file path must not contain ..'
-
-        hostpath = ospath.join('..', 'runtime', node_id, relpath)
-        hostdir = ospath.dirname(hostpath)
-        if hostdir != '':
-            makedirs(hostdir, exist_ok=True)
-
-        print(content, file=open(hostpath, 'w'))
-        chmod(hostpath, 0o755 if self._runtimeFileIsExecutable(target, content) else 0o644)
-
-        runtime_mounts.append(BaseVolume(
-            source='./runtime/{}/{}'.format(node_id, relpath),
-            target=target,
-            type='bind',
-            read_only=True
-        ))
-
-        return ''
-
-    def _addNodeFile(self, node: Node, path: str, content: str, runtime_node_id: str = None,
-                     runtime_mounts: List[BaseVolume] = None, explicit_runtime: bool = False) -> str:
-        """!
-        @brief Add a node file either to Dockerfile or runtime bind mounts.
-        """
-        if runtime_mounts != None and self._shouldMountRuntimeFile(node, path, explicit_runtime):
-            return self._addRuntimeFile(runtime_node_id, path, content, runtime_mounts)
-
-        return self._addFile(path, content)
-
-    def _computeDockerfile(self, node: Node, runtime_node_id: str = None,
-                           runtime_mounts: List[BaseVolume] = None,
-                           selected_image: DockerImage = None,
-                           selected_soft: Set[str] = None) -> str:
+    def _computeDockerfile(self, node: Node) -> str:
         """!
         @brief Returns dockerfile contents for node.
         """
         dockerfile = DockerCompilerFileTemplates['dockerfile']
 
-        (image, soft) = (selected_image, selected_soft) if selected_image != None and selected_soft != None else self._selectImageFor(node)
+        (image, soft) = self._selectImageFor(node)
 
         if not node.hasAttribute('__soft_install_tiers') and len(soft) > 0:
             dockerfile += 'RUN apt-get update && apt-get install -y --no-install-recommends {}\n'.format(' '.join(sorted(soft)))
@@ -1312,7 +1154,7 @@ class Docker(Compiler):
         if self.__self_managed_network:
             start_commands += 'chmod +x /replace_address.sh\n'
             start_commands += '/replace_address.sh\n'
-            dockerfile += self._addNodeFile(node, '/replace_address.sh', DockerCompilerFileTemplates['replace_address_script'], runtime_node_id, runtime_mounts, True)
+            dockerfile += self._addFile('/replace_address.sh', DockerCompilerFileTemplates['replace_address_script'])
             dockerfile += self._addFile('/root/.zshrc.pre', DockerCompilerFileTemplates['zshrc_pre'])
 
         for (cmd, fork) in node.getStartCommands():
@@ -1321,26 +1163,21 @@ class Docker(Compiler):
         for (cmd, fork) in node.getPostConfigCommands():
             start_commands += '{}{}\n'.format(cmd, ' &' if fork else '')
 
-        dockerfile += self._addNodeFile(node, '/start.sh', DockerCompilerFileTemplates['start_script'].format(
+        dockerfile += self._addFile('/start.sh', DockerCompilerFileTemplates['start_script'].format(
             startCommands = start_commands,
             buildtime_sysctl=self._getNodeBuildtimeSysctl(node)
-        ), runtime_node_id, runtime_mounts, True)
+        ))
 
-        dockerfile += self._addNodeFile(node, '/seedemu_sniffer', DockerCompilerFileTemplates['seedemu_sniffer'], runtime_node_id, runtime_mounts, True)
-        dockerfile += self._addNodeFile(node, '/seedemu_worker', DockerCompilerFileTemplates['seedemu_worker'], runtime_node_id, runtime_mounts, True)
+        dockerfile += self._addFile('/seedemu_sniffer', DockerCompilerFileTemplates['seedemu_sniffer'])
+        dockerfile += self._addFile('/seedemu_worker', DockerCompilerFileTemplates['seedemu_worker'])
 
-        if runtime_mounts == None:
-            dockerfile += 'RUN chmod +x /start.sh\n'
-            dockerfile += 'RUN chmod +x /seedemu_sniffer\n'
-            dockerfile += 'RUN chmod +x /seedemu_worker\n'
+        dockerfile += 'RUN chmod +x /start.sh\n'
+        dockerfile += 'RUN chmod +x /seedemu_sniffer\n'
+        dockerfile += 'RUN chmod +x /seedemu_worker\n'
 
         for file in node.getFiles():
             (path, content) = file.get()
-            dockerfile += self._addNodeFile(node, path, content, runtime_node_id, runtime_mounts)
-
-        for file in node.getRuntimeFiles():
-            (path, content) = file.get()
-            dockerfile += self._addNodeFile(node, path, content, runtime_node_id, runtime_mounts, True)
+            dockerfile += self._addFile(path, content)
 
         for (cpath, hpath) in node.getImportedFiles().items():
             dockerfile += self._importFile(cpath, hpath)
@@ -1348,73 +1185,10 @@ class Docker(Compiler):
         # These commands are added by node.addBuildCommandAtEnd()
         # These RUN commands are placed at the end, after all the files
         #      are copied (COPY commands).
-        runtime_paths = set()
-        if runtime_mounts != None:
-            runtime_paths = set([vol.asDict()['target'] for vol in runtime_mounts])
-
-        for cmd in node.getBuildCommandsAtEnd():
-            if self._isRuntimeChmodCommand(cmd, runtime_paths):
-                continue
-            dockerfile += 'RUN {}\n'.format(cmd)
+        for cmd in node.getBuildCommandsAtEnd(): dockerfile += 'RUN {}\n'.format(cmd)
 
         dockerfile += 'CMD ["/start.sh"]\n'
         return dockerfile
-
-    def _computeBuildRecipeHash(self) -> str:
-        """!
-        @brief Compute hash of the current Docker build context.
-        """
-        digest = sha256()
-        digest.update(str(self.__platform).encode('utf-8'))
-
-        for root, dirs, files in walk('.'):
-            dirs.sort()
-            for filename in sorted(files):
-                filepath = ospath.join(root, filename)
-                relpath = ospath.relpath(filepath, '.')
-                digest.update(relpath.encode('utf-8'))
-                with open(filepath, 'rb') as file:
-                    digest.update(file.read())
-
-        return digest.hexdigest()[:16]
-
-    def _finalizeRuntimeImageContext(self, node_context: str, recipe_hash: str, image: DockerImage) -> Tuple[str, str]:
-        """!
-        @brief Register or reuse a shared runtime image build context.
-
-        @returns tuple of runtime image service id and image name.
-        """
-        makedirs('runtime-images', exist_ok=True)
-
-        if recipe_hash in self.__runtime_images:
-            rmtree(node_context)
-        else:
-            target_context = 'runtime-images/{}'.format(recipe_hash)
-            move(node_context, target_context)
-            service_id = 'runtime_image_{}'.format(recipe_hash)
-            image_name = 'seedemu-runtime-{}'.format(recipe_hash)
-            self.__runtime_images[recipe_hash] = (
-                service_id,
-                image_name,
-                md5(image.getName().encode('utf-8')).hexdigest()
-            )
-
-        return self.__runtime_images[recipe_hash][0], self.__runtime_images[recipe_hash][1]
-
-    def _makeRuntimeImageBuilders(self) -> str:
-        """!
-        @brief Create compose services that build shared runtime images.
-        """
-        builders = ''
-        for recipe_hash, (service_id, image_name, depends_on) in self.__runtime_images.items():
-            builders += DockerCompilerFileTemplates['compose_runtime_image'].format(
-                serviceId=service_id,
-                recipeHash=recipe_hash,
-                imageName=image_name,
-                dependsOn=depends_on
-            )
-
-        return builders
 
     def _getNodeBuildtimeSysctl(self, node: Node) -> str:
         """!@brief get sysctl-flag settings for /start.sh script
@@ -1465,42 +1239,16 @@ class Docker(Compiler):
         if self.__self_managed_network:
             node.setFile('/dummy_addr_map.txt', dummy_addr_map)
 
-        image, soft = self._selectImageFor(node)
-        runtime_mounts = None
-        runtime_depends_on = None
-        runtime_image_name = None
-
         mkdir(real_nodename)
         chdir(real_nodename)
 
-        if self.__runtime_mount:
-            runtime_mounts = []
-            dockerfile = self._computeDockerfile(node, real_nodename, runtime_mounts, image, soft)
-        else:
-            dockerfile = self._computeDockerfile(node, selected_image=image, selected_soft=soft)
+        image,_ = self._selectImageFor(node)
+        dockerfile = self._computeDockerfile(node)
         print(dockerfile, file=open('Dockerfile', 'w'))
-        recipe_hash = self._computeBuildRecipeHash() if self.__runtime_mount else None
 
         chdir('..')
 
-        if self.__runtime_mount:
-            runtime_depends_on, runtime_image_name = self._finalizeRuntimeImageContext(real_nodename, recipe_hash, image)
-
         name = self._getComposeNodeName(node)
-        if self.__runtime_mount:
-            return DockerCompilerFileTemplates['compose_service_runtime_mount'].format(
-                nodeId = real_nodename,
-                nodeName = name,
-                imageName = runtime_image_name,
-                dependsOn = runtime_depends_on,
-                networks = node_nets,
-                sysctls = self._getNodeSysctls(node),
-                ports = self._getComposeServicePortList(node),
-                labelList = self._getNodeMeta(node),
-                volumes = self._getComposeNodeVolumes(node, runtime_mounts),
-                environment= "    - CONTAINER_NAME={}\n            ".format(name) + self._computeNodeEnvironment(node)
-            )
-
         return DockerCompilerFileTemplates['compose_service'].format(
             nodeId = real_nodename,
             nodeName = name,
@@ -1800,7 +1548,7 @@ class Docker(Compiler):
             services=self.__services,
             networks=self.__networks,
             volumes=toplevelvolumes,
-            dummies=local_images + self._makeDummies() + self._makeRuntimeImageBuilders()
+            dummies=local_images + self._makeDummies()
         ), file=open('docker-compose.yml', 'w'))
 
         self.generateEnvFile(Scope(ScopeTier.Global),'')
