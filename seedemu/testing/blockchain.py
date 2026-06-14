@@ -7,6 +7,7 @@ import re
 import shlex
 import time
 import urllib.request
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
@@ -26,6 +27,7 @@ ETH_CONSENSUS_LABEL = META_PREFIX + "ethereum.consensus"
 ETH_CHAIN_ID_LABEL = META_PREFIX + "ethereum.chain_id"
 
 DEFAULT_TRANSFER_RECIPIENT = "0x1000000000000000000000000000000000000001"
+LOCAL_ACCOUNT_CACHE_VERSION = 1
 
 
 def _label_list(value: object) -> List[str]:
@@ -571,13 +573,14 @@ class EthereumRuntimeTest(ComposeRuntimeTest):
 
         state = self._local_account_transaction_state(service)
         sender = str(state["sender"])
-        private_key = self._private_key_for_local_account(service, sender, password)
+        chain_id = self._chain_id_for_service(service)
+        private_key = self._private_key_for_local_account(service, sender, password, chain_id=chain_id)
         account = Account.from_key(private_key)
         if account.address.lower() != sender.lower():
             raise RuntimeError("decrypted key {} does not match local geth account {}".format(account.address, sender))
 
         transaction = {
-            "chainId": self._chain_id_for_service(service),
+            "chainId": chain_id,
             "nonce": self._rpc_int(state["nonce"]),
             "gas": 21000,
             "gasPrice": self._rpc_int(state["gasPrice"]),
@@ -601,11 +604,27 @@ class EthereumRuntimeTest(ComposeRuntimeTest):
             raise RuntimeError(result["stderr"] or result["stdout"] or "failed to inspect local geth account")
         return self._extract_json(str(result["stdout"]))
 
-    def _private_key_for_local_account(self, service: ComposeService | str, sender: str, password: str) -> str:
+    def _private_key_for_local_account(
+        self,
+        service: ComposeService | str,
+        sender: str,
+        password: str,
+        *,
+        chain_id: Optional[int] = None,
+    ) -> str:
         try:
             from eth_account import Account
         except ImportError as exc:
             raise RuntimeError("eth_account is required to decrypt geth keystore files") from exc
+
+        cached_private_key = self._load_cached_local_private_key(sender, chain_id)
+        if cached_private_key:
+            try:
+                cached_account = Account.from_key(cached_private_key)
+            except Exception:
+                cached_account = None
+            if cached_account is not None and cached_account.address.lower() == sender.lower():
+                return cached_private_key
 
         passwords = [password]
         password_result = self.exec(service, "cat /tmp/eth-password 2>/dev/null || true", timeout=30)
@@ -637,10 +656,75 @@ class EthereumRuntimeTest(ComposeRuntimeTest):
                     errors.append("{}: decrypt failed: {}".format(path_item, exc))
                     continue
                 if account.address.lower() == sender.lower():
+                    self._save_cached_local_private_key(sender, chain_id, private_key)
                     return private_key
 
         detail = "; ".join(errors[-3:]) if errors else "no readable keystore files"
         raise RuntimeError("could not decrypt local geth account {}: {}".format(sender, detail))
+
+    def _local_account_cache_path(self) -> Optional[Path]:
+        if self.artifact_dir is None:
+            return None
+        return self.artifact_dir / "ethereum-local-account-cache.json"
+
+    @staticmethod
+    def _local_account_cache_key(sender: str, chain_id: Optional[int]) -> str:
+        return "{}:{}".format(chain_id if chain_id is not None else "unknown", sender.lower())
+
+    def _load_cached_local_private_key(self, sender: str, chain_id: Optional[int]) -> Optional[str]:
+        cache_path = self._local_account_cache_path()
+        if cache_path is None or not cache_path.is_file():
+            return None
+        try:
+            data = json.loads(cache_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(data, dict) or data.get("version") != LOCAL_ACCOUNT_CACHE_VERSION:
+            return None
+        accounts = data.get("accounts")
+        if not isinstance(accounts, dict):
+            return None
+        entry = accounts.get(self._local_account_cache_key(sender, chain_id))
+        if not isinstance(entry, dict):
+            return None
+        private_key = entry.get("private_key")
+        if not isinstance(private_key, str) or not private_key:
+            return None
+        if not private_key.startswith("0x"):
+            private_key = "0x" + private_key
+        return private_key
+
+    def _save_cached_local_private_key(self, sender: str, chain_id: Optional[int], private_key: str) -> None:
+        cache_path = self._local_account_cache_path()
+        if cache_path is None:
+            return
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            if cache_path.is_file():
+                data = json.loads(cache_path.read_text(encoding="utf-8"))
+            else:
+                data = {}
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        if not isinstance(data, dict) or data.get("version") != LOCAL_ACCOUNT_CACHE_VERSION:
+            data = {"version": LOCAL_ACCOUNT_CACHE_VERSION, "accounts": {}}
+        accounts = data.setdefault("accounts", {})
+        if not isinstance(accounts, dict):
+            accounts = {}
+            data["accounts"] = accounts
+        accounts[self._local_account_cache_key(sender, chain_id)] = {
+            "sender": sender,
+            "chain_id": chain_id,
+            "private_key": private_key,
+        }
+        tmp_path = cache_path.with_name(cache_path.name + ".tmp")
+        try:
+            tmp_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            tmp_path.chmod(0o600)
+            tmp_path.replace(cache_path)
+            cache_path.chmod(0o600)
+        except OSError:
+            return
 
     def _local_keystore_paths(self, service: ComposeService | str) -> List[str]:
         command = (
