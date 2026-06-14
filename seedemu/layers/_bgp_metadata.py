@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Tuple
+from hashlib import sha1
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from seedemu.core import Router
 from seedemu.core.enums import NetworkType
@@ -19,6 +20,36 @@ BGP_KIND_EBGP = "ebgp"
 BGP_KIND_IBGP = "ibgp"
 BGP_EXPORT_ALL = "all"
 BGP_EXPORT_LOCAL_AND_CUSTOMER = "local_and_customer"
+
+BGP_COMMUNITY_LOCAL = "local"
+BGP_COMMUNITY_CUSTOMER = "customer"
+BGP_COMMUNITY_PEER = "peer"
+BGP_COMMUNITY_PROVIDER = "provider"
+
+BGP_COMMUNITY_ALIASES = {
+    "LOCAL_COMM": BGP_COMMUNITY_LOCAL,
+    "CUSTOMER_COMM": BGP_COMMUNITY_CUSTOMER,
+    "PEER_COMM": BGP_COMMUNITY_PEER,
+    "PROVIDER_COMM": BGP_COMMUNITY_PROVIDER,
+    "local": BGP_COMMUNITY_LOCAL,
+    "customer": BGP_COMMUNITY_CUSTOMER,
+    "peer": BGP_COMMUNITY_PEER,
+    "provider": BGP_COMMUNITY_PROVIDER,
+}
+
+BIRD_COMMUNITY_NAMES = {
+    BGP_COMMUNITY_LOCAL: "LOCAL_COMM",
+    BGP_COMMUNITY_CUSTOMER: "CUSTOMER_COMM",
+    BGP_COMMUNITY_PEER: "PEER_COMM",
+    BGP_COMMUNITY_PROVIDER: "PROVIDER_COMM",
+}
+
+FRR_COMMUNITY_VALUES = {
+    BGP_COMMUNITY_LOCAL: "0:0",
+    BGP_COMMUNITY_CUSTOMER: "1:0",
+    BGP_COMMUNITY_PEER: "2:0",
+    BGP_COMMUNITY_PROVIDER: "3:0",
+}
 
 BIRD_BGP_COMMONS_TEMPLATE = """\
 define LOCAL_COMM = ({localAsn}, 0, 0);
@@ -66,21 +97,86 @@ CONNECTED_EXPORT_FILTER = "filter { bgp_large_community.add(LOCAL_COMM); bgp_loc
 
 def get_bgp_backend(node: Router) -> str:
     """Return the router daemon backend used for BGP rendering."""
-    backend = node.getRoutingBackend() if hasattr(node, "getRoutingBackend") else BGP_BACKEND_BIRD
+    backend = node.getRoutingBackend()
     value = str(backend or BGP_BACKEND_BIRD).strip().lower()
-    return value if value in {BGP_BACKEND_BIRD, BGP_BACKEND_FRR} else BGP_BACKEND_BIRD
-
-
-def set_bgp_backend(node: Router, backend: str) -> None:
-    """Set the router daemon backend using the Router API."""
-    node.setRoutingBackend(backend)
+    if value not in {BGP_BACKEND_BIRD, BGP_BACKEND_FRR}:
+        raise ValueError("unsupported routing backend: {}".format(backend))
+    return value
 
 
 def _normalize_export_policy(policy: Any) -> str:
+    # This v1 intent model intentionally keeps export policy narrow. Richer
+    # policy controls such as prepend, MED, and AS-path filters should become a
+    # structured policy object instead of overloading these string tokens.
     value = str(policy or BGP_EXPORT_ALL).strip().lower()
     if value not in {BGP_EXPORT_ALL, BGP_EXPORT_LOCAL_AND_CUSTOMER}:
         raise ValueError("unsupported export policy: {}".format(policy))
     return value
+
+
+def _normalize_community(community: Any) -> Optional[str]:
+    if community in {None, ""}:
+        return None
+    value = str(community).strip()
+    if value == "":
+        return None
+    if value not in BGP_COMMUNITY_ALIASES:
+        raise ValueError("unsupported BGP community intent: {}".format(community))
+    return BGP_COMMUNITY_ALIASES[value]
+
+
+def render_bird_community(community: str) -> str:
+    normalized = _normalize_community(community)
+    if normalized is None:
+        raise ValueError("BIRD community rendering requires a community intent")
+    return BIRD_COMMUNITY_NAMES[normalized]
+
+
+def render_frr_community(local_asn: int, community: str) -> str:
+    normalized = _normalize_community(community)
+    if normalized is None:
+        raise ValueError("FRR community rendering requires a community intent")
+    return "{}:{}".format(local_asn, FRR_COMMUNITY_VALUES[normalized])
+
+
+def _safe_identifier(value: str) -> str:
+    ident = "".join(ch if ch.isalnum() else "_" for ch in str(value or "session"))
+    ident = ident.strip("_") or "session"
+    if ident[0].isdigit():
+        ident = "s_{}".format(ident)
+    return ident
+
+
+def _session_identity(session: Dict[str, Any]) -> Tuple[str, str, str, int, int, bool]:
+    return (
+        str(session["kind"]),
+        str(session["local_address"]),
+        str(session["peer_address"]),
+        int(session["local_asn"]),
+        int(session["peer_asn"]),
+        bool(session["route_server_client"]),
+    )
+
+
+def _assign_render_names(sessions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    used: Set[str] = set()
+    named: List[Dict[str, Any]] = []
+    for session in sessions:
+        normalized = normalize_bgp_session(session)
+        base = _safe_identifier(normalized["name"])
+        render_name = base
+        if render_name in used:
+            digest = sha1("|".join(str(part) for part in _session_identity(normalized)).encode()).hexdigest()[:8]
+            render_name = "{}_{}".format(base[:54], digest)
+            counter = 2
+            while render_name in used:
+                suffix = "_{}".format(counter)
+                render_name = "{}{}{}".format(base[:54 - len(suffix)], digest, suffix)
+                counter += 1
+        used.add(render_name)
+        normalized["render_name"] = render_name
+        named.append(normalized)
+    return named
 
 
 def normalize_bgp_session(session: Dict[str, Any]) -> Dict[str, Any]:
@@ -116,8 +212,7 @@ def normalize_bgp_session(session: Dict[str, Any]) -> Dict[str, Any]:
     if route_reflector_client and route_reflector_cluster_id is None:
         raise ValueError("route_reflector_client requires route_reflector_cluster_id")
 
-    import_community = session.get("import_community")
-    import_community = str(import_community).strip() if import_community not in {None, ""} else None
+    import_community = _normalize_community(session.get("import_community"))
     local_pref_value = session.get("local_pref")
     local_pref = int(local_pref_value) if local_pref_value not in {None, ""} else None
 
@@ -143,14 +238,26 @@ def normalize_bgp_session(session: Dict[str, Any]) -> Dict[str, Any]:
 def record_bgp_session(node: Router, session: Dict[str, Any]) -> Dict[str, Any]:
     normalized = normalize_bgp_session(session)
     sessions = [
-        dict(item)
+        normalize_bgp_session(item)
         for item in list(node.getAttribute(BGP_SESSION_INTENTS_ATTR, []) or [])
         if isinstance(item, dict)
     ]
-    sessions = [item for item in sessions if str(item.get("name") or "") != normalized["name"]]
-    sessions.append(normalized)
-    node.setAttribute(BGP_SESSION_INTENTS_ATTR, sessions)
-    return dict(normalized)
+    replaced = False
+    updated: List[Dict[str, Any]] = []
+    for item in sessions:
+        if _session_identity(item) == _session_identity(normalized):
+            updated.append(normalized)
+            replaced = True
+        else:
+            updated.append(item)
+    if not replaced:
+        updated.append(normalized)
+    updated = _assign_render_names(updated)
+    node.setAttribute(BGP_SESSION_INTENTS_ATTR, updated)
+    for item in updated:
+        if _session_identity(item) == _session_identity(normalized):
+            return dict(item)
+    return dict(updated[-1])
 
 
 def get_bgp_sessions(node: Router) -> List[Dict[str, Any]]:
@@ -158,7 +265,7 @@ def get_bgp_sessions(node: Router) -> List[Dict[str, Any]]:
     for item in list(node.getAttribute(BGP_SESSION_INTENTS_ATTR, []) or []):
         if isinstance(item, dict):
             sessions.append(normalize_bgp_session(item))
-    return sessions
+    return _assign_render_names(sessions)
 
 
 def mark_bgp_connected_export(node: Router) -> None:
@@ -193,7 +300,7 @@ def _bird_import_clause(session: Dict[str, Any]) -> str:
             "            bgp_local_pref = {};\n"
             "            accept;\n"
             "        }}"
-        ).format(session["import_community"], int(session["local_pref"]))
+        ).format(render_bird_community(session["import_community"]), int(session["local_pref"]))
     return "all"
 
 

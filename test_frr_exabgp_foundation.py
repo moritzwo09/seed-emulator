@@ -5,8 +5,8 @@ import importlib
 import pytest
 
 from seedemu.core import Binding, Emulator, Filter
-from seedemu.layers import Base, Ebgp, Ibgp, Ospf, PeerRelationship, Routing
-from seedemu.layers._bgp_metadata import set_bgp_backend
+from seedemu.layers import Base, Ebgp, Ibgp, Mpls, Ospf, PeerRelationship, Routing
+from seedemu.layers._bgp_metadata import get_bgp_sessions, get_ospf_interface_intents
 from seedemu.services import ExaBgpService
 
 
@@ -74,7 +74,7 @@ def test_frr_route_server_backend_is_explicitly_rejected():
     ebgp = Ebgp()
 
     ix = base.createInternetExchange(100)
-    set_bgp_backend(ix.getRouteServerNode(), "frr")
+    ix.getRouteServerNode().setRoutingBackend("frr")
     as150 = base.createAutonomousSystem(150)
     as150.createNetwork("net0")
     as150.createRouter("router0").joinNetwork("net0").joinNetwork("ix100")
@@ -142,6 +142,40 @@ def test_frr_backend_renders_frr_config_for_selected_router():
     assert "interface net0" in frr_conf
 
 
+def test_duplicate_bgp_session_names_are_preserved_with_unique_render_names():
+    emu = Emulator()
+    base = Base()
+    routing = Routing()
+    ebgp = Ebgp()
+
+    base.createInternetExchange(100)
+    base.createInternetExchange(101)
+
+    as2 = base.createAutonomousSystem(2)
+    as2.createRouter("router0").joinNetwork("ix100").joinNetwork("ix101")
+
+    as151 = base.createAutonomousSystem(151)
+    as151.createRouter("router0").joinNetwork("ix100").joinNetwork("ix101")
+
+    ebgp.addPrivatePeering(100, 2, 151, abRelationship=PeerRelationship.Peer)
+    ebgp.addPrivatePeering(101, 2, 151, abRelationship=PeerRelationship.Peer)
+
+    emu.addLayer(base)
+    emu.addLayer(routing)
+    emu.addLayer(ebgp)
+    emu.render()
+
+    router = emu.getRegistry().get("2", "rnode", "router0")
+    sessions = get_bgp_sessions(router)
+    assert len([session for session in sessions if session["name"] == "p_as151"]) == 2
+    assert len({session["render_name"] for session in sessions}) == len(sessions)
+
+    bird_conf = _file_content(router, "/etc/bird/bird.conf")
+    assert bird_conf.count("neighbor 10.100.0.151 as 151") == 1
+    assert bird_conf.count("neighbor 10.101.0.151 as 151") == 1
+    assert bird_conf.count("protocol bgp p_as151") == 2
+
+
 def test_route_reflector_intent_renders_without_direct_ibgp_bird_writes():
     emu = Emulator()
     base = Base()
@@ -174,6 +208,93 @@ def test_route_reflector_intent_renders_without_direct_ibgp_bird_writes():
     assert "protocol bgp Ibgp_rr_rr" in client_conf
     assert "next hop self" in client_conf
     assert rr_conf.index("ipv4 table t_ospf") < rr_conf.index("protocol bgp Ibgp_rr_client_client")
+
+
+def test_frr_route_reflector_renders_cluster_id_and_client():
+    emu = Emulator()
+    base = Base()
+    routing = Routing()
+    ospf = Ospf()
+    ibgp = Ibgp()
+
+    as2 = base.createAutonomousSystem(2)
+    as2.createNetwork("net0")
+    as2.createBgpCluster("10.2.0.1")
+    as2.createRouter("rr", routingBackend="frr").joinNetwork("net0").joinBgpCluster("10.2.0.1").makeRouteReflector()
+    as2.createRouter("client").joinNetwork("net0").joinBgpCluster("10.2.0.1")
+
+    emu.addLayer(base)
+    emu.addLayer(routing)
+    emu.addLayer(ospf)
+    emu.addLayer(ibgp)
+    emu.render()
+
+    rr = emu.getRegistry().get("2", "rnode", "rr")
+    frr_conf = _file_content(rr, "/etc/frr/frr.conf")
+
+    assert "router bgp 2" in frr_conf
+    assert " bgp cluster-id 10.2.0.1" in frr_conf
+    assert "neighbor 10.0.0.2 route-reflector-client" in frr_conf
+    assert "neighbor 10.0.0.2 passive" in frr_conf
+
+
+def test_mpls_masks_ospf_and_ibgp_before_intent_is_recorded():
+    emu = Emulator()
+    base = Base()
+    routing = Routing()
+    ebgp = Ebgp()
+    ibgp = Ibgp()
+    ospf = Ospf()
+    mpls = Mpls()
+
+    base.createInternetExchange(100)
+    base.createInternetExchange(101)
+
+    as2 = base.createAutonomousSystem(2)
+    as2.createNetwork("net0")
+    as2.createNetwork("net1")
+    as2.createNetwork("net2")
+    as2.createRouter("r1").joinNetwork("net0").joinNetwork("ix100")
+    as2.createRouter("r2").joinNetwork("net0").joinNetwork("net1")
+    as2.createRouter("r3").joinNetwork("net1").joinNetwork("net2")
+    as2.createRouter("r4").joinNetwork("net2").joinNetwork("ix101")
+    mpls.enableOn(2)
+
+    as151 = base.createAutonomousSystem(151)
+    as151.createNetwork("net0")
+    as151.createRouter("router0").joinNetwork("net0").joinNetwork("ix100")
+
+    as152 = base.createAutonomousSystem(152)
+    as152.createNetwork("net0")
+    as152.createRouter("router0").joinNetwork("net0").joinNetwork("ix101")
+
+    ebgp.addPrivatePeering(100, 2, 151, abRelationship=PeerRelationship.Provider)
+    ebgp.addPrivatePeering(101, 2, 152, abRelationship=PeerRelationship.Provider)
+
+    emu.addLayer(base)
+    emu.addLayer(routing)
+    emu.addLayer(ebgp)
+    emu.addLayer(ibgp)
+    emu.addLayer(ospf)
+    emu.addLayer(mpls)
+    emu.render()
+
+    r1 = emu.getRegistry().get("2", "rnode", "r1")
+    r2 = emu.getRegistry().get("2", "rnode", "r2")
+    r4 = emu.getRegistry().get("2", "rnode", "r4")
+
+    assert get_ospf_interface_intents(r1) == {"active": [], "passive": []}
+    assert [session for session in get_bgp_sessions(r1) if session["kind"] == "ibgp"] == []
+    assert get_bgp_sessions(r2) == []
+
+    r1_conf = _file_content(r1, "/etc/bird/bird.conf")
+    r2_conf = _file_content(r2, "/etc/bird/bird.conf")
+    r4_conf = _file_content(r4, "/etc/bird/bird.conf")
+    assert "protocol ospf ospf1" not in r1_conf
+    assert "protocol ospf ospf1" not in r2_conf
+    assert "protocol bgp ibgp" not in r2_conf
+    assert "protocol bgp ibgp1" in r1_conf
+    assert "protocol bgp ibgp1" in r4_conf
 
 
 def test_exabgp_service_renders_speaker_and_router_peer():

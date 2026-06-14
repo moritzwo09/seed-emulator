@@ -13,6 +13,7 @@ from ._bgp_metadata import (
     get_ospf_interface_intents,
     has_bgp_connected_export,
     ensure_bird_bgp_base,
+    render_frr_community,
     render_bird_protocol_body,
 )
 
@@ -154,19 +155,9 @@ router ospf
 """
 
 
-def _frr_map_name(prefix: str, session_name: str) -> str:
-    safe = "".join(ch if ch.isalnum() else "_" for ch in str(session_name or "session"))
+def _frr_map_name(prefix: str, session_id: str) -> str:
+    safe = "".join(ch if ch.isalnum() else "_" for ch in str(session_id or "session"))
     return "{}_{}".format(prefix, safe)[:64]
-
-
-def _community_alias(local_asn: int, name: str) -> str:
-    aliases = {
-        "LOCAL_COMM": "{}:0:0".format(local_asn),
-        "CUSTOMER_COMM": "{}:1:0".format(local_asn),
-        "PEER_COMM": "{}:2:0".format(local_asn),
-        "PROVIDER_COMM": "{}:3:0".format(local_asn),
-    }
-    return aliases.get(str(name or ""), str(name or ""))
 
 
 class Routing(Layer):
@@ -219,7 +210,7 @@ class Routing(Layer):
         @brief Ensure a routing backend keeps the router base system.
         """
         base = node.getBaseSystem()
-        if not BaseSystem.doesAContainB(base,BaseSystem.SEEDEMU_ROUTER) and base !=BaseSystem.SEEDEMU_ROUTER:
+        if not BaseSystem.doesAContainB(base, BaseSystem.SEEDEMU_ROUTER):
             node.setBaseSystem(BaseSystem.SEEDEMU_ROUTER)
 
     def _installFrr(self, node: Node):
@@ -233,8 +224,6 @@ class Routing(Layer):
         backend = get_bgp_backend(rs_node)
         if backend == BGP_BACKEND_FRR:
             raise NotImplementedError("FRR route-server nodes are not supported yet; use BIRD route servers")
-        if backend != BGP_BACKEND_BIRD:
-            raise ValueError("unsupported routing backend for route server: {}".format(backend))
         rs_node.appendStartCommand('[ ! -d /run/bird ] && mkdir /run/bird')
         rs_node.appendStartCommand('bird -d', True)
         self._log("Bootstrapping bird.conf for RS {}...".format(rs_node.getName()))
@@ -299,7 +288,7 @@ class Routing(Layer):
             include_tables = not sessions or any(not session["route_server_client"] for session in sessions)
             ensure_bird_bgp_base(rnode, include_tables=include_tables)
         for session in sessions:
-            rnode.addProtocol('bgp', session["name"], render_bird_protocol_body(session))
+            rnode.addProtocol('bgp', session["render_name"], render_bird_protocol_body(session))
 
     def _render_frr_connected_export(self, router: Router) -> Tuple[str, bool]:
         prefixes: List[str] = []
@@ -326,26 +315,26 @@ class Routing(Layer):
         body: List[str] = []
         map_names: Dict[str, Dict[str, str]] = {}
         for session in sessions:
-            name = str(session.get("name") or "session")
+            session_id = str(session.get("render_name") or session.get("name") or "session")
             import_name = ""
             import_community = str(session.get("import_community") or "").strip()
             local_pref = session.get("local_pref")
             if import_community and local_pref is not None:
-                import_name = _frr_map_name("RM_IMPORT", name)
+                import_name = _frr_map_name("RM_IMPORT", session_id)
                 body.append(
                     FrrFileTemplates["import_route_map"].format(
                         name=import_name,
-                        community=_community_alias(local_asn, import_community),
+                        community=render_frr_community(local_asn, import_community),
                         local_pref=int(local_pref),
                     )
                 )
 
-            export_name = _frr_map_name("RM_EXPORT", name)
+            export_name = _frr_map_name("RM_EXPORT", session_id)
             if session["export_policy"] == BGP_EXPORT_LOCAL_AND_CUSTOMER:
                 body.append(FrrFileTemplates["export_route_map_local_customer"].format(name=export_name))
             else:
                 body.append(FrrFileTemplates["export_route_map_all"].format(name=export_name))
-            map_names[name] = {"import": import_name, "export": export_name}
+            map_names[session_id] = {"import": import_name, "export": export_name}
         return "".join(body), map_names
 
     def _render_frr_bgp(self, router: Router) -> str:
@@ -371,6 +360,19 @@ class Routing(Layer):
             " no bgp ebgp-requires-policy",
             " no bgp default ipv4-unicast",
         ]
+        rr_cluster_ids = {
+            session["route_reflector_cluster_id"]
+            for session in sessions
+            if session["route_reflector_client"]
+        }
+        if len(rr_cluster_ids) > 1:
+            raise ValueError(
+                "FRR supports one route-reflector cluster-id per router, got {}".format(
+                    ", ".join(sorted(rr_cluster_ids))
+                )
+            )
+        if rr_cluster_ids:
+            bgp.append(" bgp cluster-id {}".format(next(iter(rr_cluster_ids))))
         for session in sessions:
             bgp.append(" neighbor {} remote-as {}".format(session["peer_address"], session["peer_asn"]))
             bgp.append(" neighbor {} update-source {}".format(session["peer_address"], session["local_address"]))
@@ -382,7 +384,8 @@ class Routing(Layer):
         if has_connected:
             bgp.append("  redistribute connected route-map RM_CONNECTED_TO_BGP")
         for session in sessions:
-            maps = map_names.get(session["name"], {})
+            session_id = str(session.get("render_name") or session.get("name") or "session")
+            maps = map_names.get(session_id, {})
             bgp.append("  neighbor {} activate".format(session["peer_address"]))
             if session["next_hop_self"]:
                 bgp.append("  neighbor {} next-hop-self".format(session["peer_address"]))
@@ -451,10 +454,8 @@ class Routing(Layer):
 
                 if backend == BGP_BACKEND_BIRD:
                     self._installBird(rnode)
-                elif backend == BGP_BACKEND_FRR:
-                    self._installFrr(rnode)
                 else:
-                    raise ValueError("unsupported routing backend for router as{}/{}: {}".format(scope, name, backend))
+                    self._installFrr(rnode)
 
                 r_ifaces = rnode.getInterfaces()
                 assert len(r_ifaces) > 0, "router node {}/{} has no interfaces".format(rnode.getAsn(), rnode.getName())
@@ -502,10 +503,8 @@ class Routing(Layer):
                 backend = get_bgp_backend(rnode)
                 if backend == BGP_BACKEND_BIRD:
                     self._render_bird_control_plane(rnode)
-                elif backend == BGP_BACKEND_FRR:
-                    self._render_frr_control_plane(rnode)
                 else:
-                    raise ValueError("unsupported routing backend for router as{}/{}: {}".format(rnode.getAsn(), rnode.getName(), backend))
+                    self._render_frr_control_plane(rnode)
 
                 if rnode.hasExtension('RealWorldRouter'): # could also be ScionRouter which needs RealWorldAccess
 

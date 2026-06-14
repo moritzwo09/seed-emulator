@@ -3,9 +3,13 @@ from __future__ import annotations
 from ipaddress import ip_network
 from typing import Dict, List, Optional, Tuple
 
-from seedemu.core import Emulator, Network, Node, ScopedRegistry, Server, Service
-from seedemu.layers.Routing import Router
-from seedemu.layers._bgp_metadata import install_router_bgp_session
+from seedemu.core import Emulator, Network, Node, Router, ScopedRegistry, Server, Service
+from seedemu.layers._bgp_metadata import (
+    BGP_COMMUNITY_CUSTOMER,
+    BGP_COMMUNITY_PEER,
+    BGP_COMMUNITY_PROVIDER,
+    install_router_bgp_session,
+)
 
 
 ExaBgpFileTemplates: Dict[str, str] = {}
@@ -120,11 +124,11 @@ class ExaBgpServer(Server):
 
     def _relationship_params(self, relationship: str) -> Tuple[Optional[str], Optional[int], str]:
         if relationship == "customer":
-            return "CUSTOMER_COMM", 30, "all"
+            return BGP_COMMUNITY_CUSTOMER, 30, "all"
         if relationship == "peer":
-            return "PEER_COMM", 20, "local_and_customer"
+            return BGP_COMMUNITY_PEER, 20, "local_and_customer"
         if relationship == "provider":
-            return "PROVIDER_COMM", 10, "local_and_customer"
+            return BGP_COMMUNITY_PROVIDER, 10, "local_and_customer"
         return None, None, "all"
 
     def _resolve_ix_net(self, ix: int) -> Network:

@@ -1,10 +1,12 @@
 from __future__ import annotations
-from .Routing import Router
-from seedemu.core import Registry, ScopedRegistry, Network, Interface, Graphable, Emulator, Layer
+from seedemu.core import Registry, ScopedRegistry, Network, Interface, Graphable, Emulator, Layer, Router
 from seedemu.core.enums import NodeRole
 from typing import Tuple, List, Dict
 from enum import Enum
 from ._bgp_metadata import (
+    BGP_COMMUNITY_CUSTOMER,
+    BGP_COMMUNITY_PEER,
+    BGP_COMMUNITY_PROVIDER,
     BGP_EXPORT_ALL,
     BGP_EXPORT_LOCAL_AND_CUSTOMER,
     install_router_bgp_session,
@@ -118,7 +120,7 @@ class Ebgp(Layer, Graphable):
                 routerA.getAsn(),
                 addrA,
                 rsNode.getAsn(),
-                importCommunity="PEER_COMM",
+                importCommunity=BGP_COMMUNITY_PEER,
                 bgpPref=20,
                 exportPolicy=BGP_EXPORT_LOCAL_AND_CUSTOMER,
             )
@@ -126,16 +128,16 @@ class Ebgp(Layer, Graphable):
             return
 
         if rel == PeerRelationship.Peer:
-            self.__recordPeer(routerA, 'p_as{}'.format(routerB.getAsn()), addrA, routerA.getAsn(), addrB, routerB.getAsn(), "PEER_COMM", 20, BGP_EXPORT_LOCAL_AND_CUSTOMER)
-            self.__recordPeer(routerB, 'p_as{}'.format(routerA.getAsn()), addrB, routerB.getAsn(), addrA, routerA.getAsn(), "PEER_COMM", 20, BGP_EXPORT_LOCAL_AND_CUSTOMER)
+            self.__recordPeer(routerA, 'p_as{}'.format(routerB.getAsn()), addrA, routerA.getAsn(), addrB, routerB.getAsn(), BGP_COMMUNITY_PEER, 20, BGP_EXPORT_LOCAL_AND_CUSTOMER)
+            self.__recordPeer(routerB, 'p_as{}'.format(routerA.getAsn()), addrB, routerB.getAsn(), addrA, routerA.getAsn(), BGP_COMMUNITY_PEER, 20, BGP_EXPORT_LOCAL_AND_CUSTOMER)
 
         if rel == PeerRelationship.Provider:
-            self.__recordPeer(routerA, 'c_as{}'.format(routerB.getAsn()), addrA, routerA.getAsn(), addrB, routerB.getAsn(), "CUSTOMER_COMM", 30, BGP_EXPORT_ALL)
-            self.__recordPeer(routerB, 'u_as{}'.format(routerA.getAsn()), addrB, routerB.getAsn(), addrA, routerA.getAsn(), "PROVIDER_COMM", 10, BGP_EXPORT_LOCAL_AND_CUSTOMER)
+            self.__recordPeer(routerA, 'c_as{}'.format(routerB.getAsn()), addrA, routerA.getAsn(), addrB, routerB.getAsn(), BGP_COMMUNITY_CUSTOMER, 30, BGP_EXPORT_ALL)
+            self.__recordPeer(routerB, 'u_as{}'.format(routerA.getAsn()), addrB, routerB.getAsn(), addrA, routerA.getAsn(), BGP_COMMUNITY_PROVIDER, 10, BGP_EXPORT_LOCAL_AND_CUSTOMER)
 
         if rel == PeerRelationship.Unfiltered:
-            self.__recordPeer(routerA, 'x_as{}'.format(routerB.getAsn()), addrA, routerA.getAsn(), addrB, routerB.getAsn(), "CUSTOMER_COMM", 30, BGP_EXPORT_ALL)
-            self.__recordPeer(routerB, 'x_as{}'.format(routerA.getAsn()), addrB, routerB.getAsn(), addrA, routerA.getAsn(), "PROVIDER_COMM", 10, BGP_EXPORT_ALL)
+            self.__recordPeer(routerA, 'x_as{}'.format(routerB.getAsn()), addrA, routerA.getAsn(), addrB, routerB.getAsn(), BGP_COMMUNITY_CUSTOMER, 30, BGP_EXPORT_ALL)
+            self.__recordPeer(routerB, 'x_as{}'.format(routerA.getAsn()), addrB, routerB.getAsn(), addrA, routerA.getAsn(), BGP_COMMUNITY_PROVIDER, 10, BGP_EXPORT_ALL)
 
     def getName(self) -> str:
         return "Ebgp"
