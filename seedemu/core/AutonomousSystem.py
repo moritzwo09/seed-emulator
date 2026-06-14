@@ -294,15 +294,16 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
         """
         return list(self.__nets.keys())
 
-    def createRouter(self, name: str) -> Node:
+    def createRouter(self, name: str, routingBackend: str = "bird") -> Node:
         """!
         @brief Create a router node.
 
         @param name name of the new node.
+        @param routingBackend routing daemon backend, bird or frr. Default to bird.
         @returns Node.
         """
         assert name not in self.__routers, 'Router with name {} already exists.'.format(name)
-        self.__routers[name] = Router(name, NodeRole.Router, self.__asn)
+        self.__routers[name] = Router(name, NodeRole.Router, self.__asn, routingBackend=routingBackend)
 
         return self.__routers[name]
 

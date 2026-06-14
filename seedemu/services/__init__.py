@@ -19,3 +19,4 @@ from .ChainlinkService import *
 from .TrafficService import *
 from .DevService import *
 from .CDNService import CDNService, CDNOriginServer, CDNEdgeServer
+from .ExaBgpService import ExaBgpService, ExaBgpServer

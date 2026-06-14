@@ -12,6 +12,11 @@ from typing import Dict, List, Optional
 
 import yaml
 
+try:
+    from .compose import docker_compose_command
+except ImportError:
+    from compose import docker_compose_command
+
 
 ASN_LABEL = "org.seedsecuritylabs.seedemu.meta.asn"
 NODE_LABEL = "org.seedsecuritylabs.seedemu.meta.nodename"
@@ -80,7 +85,8 @@ class ComposeRuntimeTest:
     def exec(self, service: ComposeService | str, command: str, timeout: int = 45) -> Dict[str, object]:
         service_name = service.name if isinstance(service, ComposeService) else str(service)
         result = subprocess.run(
-            ["docker", "compose", "-f", str(self.compose_file), "exec", "-T", service_name, "sh", "-lc", command],
+            docker_compose_command()
+            + ["-f", str(self.compose_file), "exec", "-T", service_name, "sh", "-lc", command],
             cwd=str(self.compose_file.parent),
             text=True,
             capture_output=True,

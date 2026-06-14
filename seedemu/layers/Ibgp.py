@@ -3,54 +3,8 @@ from seedemu.core.enums import NetworkType, NodeRole
 from .Base import Base
 from seedemu.core import ScopedRegistry, Node, Graphable, Emulator, Layer
 from typing import Dict, List, Set, Tuple
+from ._bgp_metadata import install_router_bgp_session
 
-IbgpFileTemplates: Dict[str, str] = {}
-
-IbgpFileTemplates['ibgp_peer'] = '''
-    # debug {{states,events}};
-    # hold time 36000;
-    # keepalive time 60;
-    ipv4 {{
-        table t_bgp;
-        import all;
-        export all;
-        igp table t_ospf;
-    }};
-    local {localAddress} as {asn};
-    neighbor {peerAddress} as {asn};
-'''
-
-IbgpFileTemplates['ibgp_client'] = '''
-    # debug {{states,events}};
-    # hold time 36000;
-    # keepalive time 60;
-    ipv4 {{
-        table t_bgp;
-        import all;
-        export all;
-        igp table t_ospf;
-        next hop self;
-    }};
-    local {localAddress} as {asn};
-    neighbor {peerAddress} as {asn};
-'''
-
-IbgpFileTemplates['ibgp_rr_server'] = '''
-    # debug {{states,events}};
-    # hold time 36000;
-    # keepalive time 60;
-    passive yes;
-    ipv4 {{
-        table t_bgp;
-        import all;
-        export all;
-        igp table t_ospf;
-    }};
-    local {localAddress} as {asn};
-    neighbor {peerAddress} as {asn};
-    rr client;
-    rr cluster id {clusterId};
-'''
 
 class Ibgp(Layer, Graphable):
     """!
@@ -125,7 +79,7 @@ class Ibgp(Layer, Graphable):
         """
         return self.__masked
 
-    def render(self, emulator: Emulator):
+    def configure(self, emulator: Emulator):
         reg = emulator.getRegistry()
         base: Base = reg.get('seedemu', 'layer', 'Base')
         for asn in base.getAsns():
@@ -163,9 +117,6 @@ class Ibgp(Layer, Graphable):
                     continue
 
                 rr_node = routers_map[rr_name]
-                rr_node.addTable('t_bgp')
-                rr_node.addTablePipe('t_bgp')
-                rr_node.addTablePipe('t_direct', 't_bgp')
                 rr_address = rr_node.getLoopbackAddress()
 
                 for client_name in sorted(client_names):
@@ -173,22 +124,38 @@ class Ibgp(Layer, Graphable):
                         continue
 
                     client_node = routers_map[client_name]
-                    client_node.addTable('t_bgp')
-                    client_node.addTablePipe('t_bgp')
-                    client_node.addTablePipe('t_direct', 't_bgp')
                     client_address = client_node.getLoopbackAddress()
-
-                    rr_node.addProtocol('bgp', 'Ibgp_rr_client_{}'.format(client_name), IbgpFileTemplates['ibgp_rr_server'].format(
-                        localAddress = rr_address,
-                        peerAddress = client_address,
-                        asn = asn,
-                        clusterId = cluster_id
-                    ))
-                    client_node.addProtocol('bgp', 'Ibgp_rr_{}'.format(rr_name), IbgpFileTemplates['ibgp_client'].format(
-                        localAddress = client_address,
-                        peerAddress = rr_address,
-                        asn = asn
-                    ))
+                    install_router_bgp_session(
+                        rr_node,
+                        {
+                            "name": "Ibgp_rr_client_{}".format(client_name),
+                            "kind": "ibgp",
+                            "local_address": str(rr_address),
+                            "local_asn": asn,
+                            "peer_address": str(client_address),
+                            "peer_asn": asn,
+                            "export_policy": "all",
+                            "next_hop_self": False,
+                            "igp_table": "t_ospf",
+                            "passive": True,
+                            "route_reflector_client": True,
+                            "route_reflector_cluster_id": cluster_id,
+                        },
+                    )
+                    install_router_bgp_session(
+                        client_node,
+                        {
+                            "name": "Ibgp_rr_{}".format(rr_name),
+                            "kind": "ibgp",
+                            "local_address": str(client_address),
+                            "local_asn": asn,
+                            "peer_address": str(rr_address),
+                            "peer_asn": asn,
+                            "export_policy": "all",
+                            "next_hop_self": True,
+                            "igp_table": "t_ospf",
+                        },
+                    )
 
                     self._log(
                         'adding RR peering: {}(RR) <-> {}(client) cluster {} (as{})'.format(
@@ -206,24 +173,34 @@ class Ibgp(Layer, Graphable):
                 node_a = sorted_rrs[i]
                 node_b = sorted_rrs[j]
 
-                node_a.addTable('t_bgp')
-                node_a.addTablePipe('t_bgp')
-                node_a.addTablePipe('t_direct', 't_bgp')
-
-                node_b.addTable('t_bgp')
-                node_b.addTablePipe('t_bgp')
-                node_b.addTablePipe('t_direct', 't_bgp')
-
-                node_a.addProtocol('bgp', 'Ibgp_rr_mesh_{}'.format(node_b.getName()), IbgpFileTemplates['ibgp_peer'].format(
-                    localAddress = node_a.getLoopbackAddress(),
-                    peerAddress = node_b.getLoopbackAddress(),
-                    asn = asn
-                ))
-                node_b.addProtocol('bgp', 'Ibgp_rr_mesh_{}'.format(node_a.getName()), IbgpFileTemplates['ibgp_peer'].format(
-                    localAddress = node_b.getLoopbackAddress(),
-                    peerAddress = node_a.getLoopbackAddress(),
-                    asn = asn
-                ))
+                install_router_bgp_session(
+                    node_a,
+                    {
+                        "name": "Ibgp_rr_mesh_{}".format(node_b.getName()),
+                        "kind": "ibgp",
+                        "local_address": str(node_a.getLoopbackAddress()),
+                        "local_asn": asn,
+                        "peer_address": str(node_b.getLoopbackAddress()),
+                        "peer_asn": asn,
+                        "export_policy": "all",
+                        "next_hop_self": False,
+                        "igp_table": "t_ospf",
+                    },
+                )
+                install_router_bgp_session(
+                    node_b,
+                    {
+                        "name": "Ibgp_rr_mesh_{}".format(node_a.getName()),
+                        "kind": "ibgp",
+                        "local_address": str(node_b.getLoopbackAddress()),
+                        "local_asn": asn,
+                        "peer_address": str(node_a.getLoopbackAddress()),
+                        "peer_asn": asn,
+                        "export_policy": "all",
+                        "next_hop_self": False,
+                        "igp_table": "t_ospf",
+                    },
+                )
 
                 self._log(
                     'adding RR mesh peering: {} <-> {} (as{})'.format(
@@ -253,18 +230,27 @@ class Ibgp(Layer, Graphable):
 
                 laddr = local.getLoopbackAddress()
                 raddr = remote.getLoopbackAddress()
-                local.addTable('t_bgp')
-                local.addTablePipe('t_bgp')
-                local.addTablePipe('t_direct', 't_bgp')
-                local.addProtocol('bgp', 'ibgp{}'.format(n), IbgpFileTemplates['ibgp_peer'].format(
-                    localAddress = laddr,
-                    peerAddress = raddr,
-                    asn = asn
-                ))
+                install_router_bgp_session(
+                    local,
+                    {
+                        "name": "ibgp{}".format(n),
+                        "kind": "ibgp",
+                        "local_address": str(laddr),
+                        "local_asn": asn,
+                        "peer_address": str(raddr),
+                        "peer_asn": asn,
+                        "export_policy": "all",
+                        "next_hop_self": False,
+                        "igp_table": "t_ospf",
+                    },
+                )
 
                 n += 1
 
                 self._log('adding peering: {} <-> {} (ibgp, as{})'.format(laddr, raddr, asn))
+
+    def render(self, emulator: Emulator):
+        pass
 
     def _doCreateGraphs(self, emulator: Emulator):
         base: Base = emulator.getRegistry().get('seedemu', 'layer', 'Base')
