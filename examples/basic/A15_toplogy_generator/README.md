@@ -13,6 +13,8 @@ AS150, AS151, AS152: stub ASes connected through AS2
 
 The generated AS2 topology has edge routers named after IXes, such as `r100`,
 `r101`, and `r102`, plus internal routers such as `core0` and `core1`.
+Internal link network names are kept compact, such as `n_c10_c5`, because Linux
+interface names inside containers must be no longer than 15 characters.
 
 ## Basic Run
 
@@ -64,6 +66,20 @@ python examples/basic/A15_toplogy_generator/topology_generator.py \
   --graph-param p=0.4 \
   --edge-attach-policy random
 ```
+
+Example with a larger AS:
+
+```sh
+python examples/basic/A15_toplogy_generator/topology_generator.py \
+  --ixes 100,101,102,103,104 \
+  --stub-asns 150,151,152,153,154 \
+  --asn 3 \
+  --internal-routers 20 \
+  --hosts-per-stub 2
+```
+
+This example intentionally keeps the default SEED `Ibgp()` behavior, which
+creates full-mesh iBGP among routers in the generated transit AS.
 
 ## Code Pattern
 

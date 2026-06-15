@@ -225,7 +225,14 @@ class TransitAsTopology:
 
     def _network_name(self, a: str, b: str) -> str:
         left, right = sorted([a, b])
-        return "net_{}_{}".format(left, right).replace("-", "_")
+        name = "n_{}_{}".format(self._short_router_name(left), self._short_router_name(right))
+        assert len(name) <= 15, "generated network name is too long for a Linux interface: {}".format(name)
+        return name
+
+    def _short_router_name(self, name: str) -> str:
+        if name.startswith("core"):
+            return "c{}".format(name[4:])
+        return name.replace("-", "_")
 
 
 class TransitAsTopologyGenerator:
