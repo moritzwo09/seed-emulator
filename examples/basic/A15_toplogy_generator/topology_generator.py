@@ -18,7 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 from seedemu.compiler import Docker, Platform
 from seedemu.core import Emulator
 from seedemu.layers import Base, Ebgp, Ibgp, Ospf, PeerRelationship, Routing
-from seedemu.utilities import Makers, TransitAsTopologyGenerator
+from seedemu.utilities import Makers, AutonomousSystemTopologyGenerator
 
 
 DEFAULT_IXES = [100, 101, 102]
@@ -57,7 +57,7 @@ def parse_csv_ints(value: str) -> List[int]:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build an AS2 transit network with a generated internal topology.")
+    parser = argparse.ArgumentParser(description="Build a transit AS with a generated internal topology.")
     parser.add_argument("legacy_platform", nargs="?", choices=["amd", "arm"])
     parser.add_argument("--platform", choices=["amd", "arm"])
     parser.add_argument("--output", default=str(SCRIPT_DIR / "output"))
@@ -70,12 +70,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--asn", type=int, default=2)
     parser.add_argument("--ixes", type=parse_csv_ints, default=DEFAULT_IXES)
     parser.add_argument("--stub-asns", type=parse_csv_ints, default=DEFAULT_STUB_ASNS)
+    parser.add_argument("--ebgp-routers", type=int)
     parser.add_argument("--hosts-per-stub", type=int, default=1)
     parser.add_argument("--internal-routers", type=int, default=4)
     parser.add_argument("--graph-model", default="small_world")
     parser.add_argument("--graph-param", action="append", type=parse_graph_param, default=[])
     parser.add_argument(
-        "--edge-attach-policy",
+        "--ebgp-attach-policy",
         choices=["spread", "round_robin", "random", "degree"],
         default="spread",
     )
@@ -83,8 +84,11 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     args.platform = args.platform or args.legacy_platform or "amd"
     args.graph_params = dict(args.graph_param)
+    args.ebgp_routers = args.ebgp_routers or len(args.ixes)
     if len(args.ixes) != len(args.stub_asns):
         parser.error("--ixes and --stub-asns must contain the same number of entries")
+    if args.ebgp_routers != len(args.ixes):
+        parser.error("this example maps one eBGP router to one IX, so --ebgp-routers must match --ixes")
     return args
 
 
@@ -100,16 +104,16 @@ def build_emulator(args: argparse.Namespace):
     for ix in args.ixes:
         base.createInternetExchange(ix)
 
-    topology = TransitAsTopologyGenerator(
-        asn=args.asn,
-        ixes=args.ixes,
+    topology = AutonomousSystemTopologyGenerator(
+        ebgp_router_count=args.ebgp_routers,
         internal_router_count=args.internal_routers,
         graph_model=args.graph_model,
         graph_params=args.graph_params,
-        edge_attach_policy=args.edge_attach_policy,
+        ebgp_attach_policy=args.ebgp_attach_policy,
         seed=args.seed,
     ).generate()
-    topology.apply_to(base)
+
+    apply_topology(base, topology, args.asn, args.ixes)
 
     for stub_asn, ix in zip(args.stub_asns, args.ixes):
         Makers.makeStubAsWithHosts(emu, base, stub_asn, ix, args.hosts_per_stub)
@@ -121,6 +125,21 @@ def build_emulator(args: argparse.Namespace):
     emu.addLayer(Ibgp())
     emu.addLayer(Ospf())
     return emu, topology
+
+
+def apply_topology(base: Base, topology, asn: int, ixes: List[int]):
+    transit_as = base.createAutonomousSystem(asn)
+    routers = {name: transit_as.createRouter(name) for name in topology.routers()}
+
+    for ebgp_router, ix in zip(topology.ebgp_routers(), ixes):
+        routers[ebgp_router].joinNetwork("ix{}".format(ix))
+
+    for left, right, network in topology.link_networks():
+        transit_as.createNetwork(network)
+        routers[left].joinNetwork(network)
+        routers[right].joinNetwork(network)
+
+    return transit_as
 
 
 def write_topology_artifacts(topology, output_dir: Path) -> None:

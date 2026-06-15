@@ -1,6 +1,6 @@
 id: basic-a15-topology-generator
-name: Transit AS Topology Generator
-description: Demonstrates NetworkX-based random transit AS topology generation with CLI controls.
+name: Autonomous System Topology Generator
+description: Demonstrates NetworkX-based random autonomous-system topology generation with CLI controls.
 runner: internet
 script: topology_generator.py
 platform: amd
@@ -32,9 +32,9 @@ runtime:
     - name: A15 generated topology services are running
       type: compose-ps
       services:
-        - brdnode_2_r100
-        - brdnode_2_r101
-        - brdnode_2_r102
+        - brdnode_2_r0
+        - brdnode_2_r1
+        - brdnode_2_r2
         - rnode_2_core0
         - rnode_2_core1
         - brdnode_150_router0
