@@ -1,4 +1,4 @@
-# A14 Control-Plane Regression
+# A63 Control-Plane Regression
 
 This example is the compact runtime regression entry for the control-plane
 foundation work. It intentionally keeps several independent slices in one
@@ -20,7 +20,7 @@ Covered slices:
 Run it locally:
 
 ```bash
-python -m seedemu.testing.cli clean examples/basic/A14_control_plane_regression/example.yaml
-python -m seedemu.testing.cli compile examples/basic/A14_control_plane_regression/example.yaml
-COMPOSE_PROJECT_NAME=seedemu-a14-control-plane python -m seedemu.testing.cli all examples/basic/A14_control_plane_regression/example.yaml
+python -m seedemu.testing.cli clean examples/basic/A63_control_plane_regression/example.yaml
+python -m seedemu.testing.cli compile examples/basic/A63_control_plane_regression/example.yaml
+COMPOSE_PROJECT_NAME=seedemu-a63-control-plane python -m seedemu.testing.cli all examples/basic/A63_control_plane_regression/example.yaml
 ```
