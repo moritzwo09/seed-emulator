@@ -80,11 +80,23 @@ def parse_args() -> argparse.Namespace:
         choices=["spread", "round_robin", "random", "degree"],
         default="spread",
     )
+    parser.add_argument(
+        "--internal-routing",
+        choices=["full-mesh", "rr", "route-reflector"],
+        default="full-mesh",
+        help="iBGP design inside the generated AS.",
+    )
+    parser.add_argument(
+        "--route-reflector",
+        help="Router name to use as the route reflector in rr mode. Defaults to a high-degree internal router.",
+    )
 
     args = parser.parse_args()
     args.platform = args.platform or args.legacy_platform or "amd"
     args.graph_params = dict(args.graph_param)
     args.ebgp_routers = args.ebgp_routers or len(args.ixes)
+    if args.internal_routing == "route-reflector":
+        args.internal_routing = "rr"
     if len(args.ixes) != len(args.stub_asns):
         parser.error("--ixes and --stub-asns must contain the same number of entries")
     if args.ebgp_routers != len(args.ixes):
@@ -113,7 +125,13 @@ def build_emulator(args: argparse.Namespace):
         seed=args.seed,
     ).generate()
 
-    apply_topology(base, topology, args.asn, args.ixes)
+    transit_as = apply_topology(base, topology, args.asn, args.ixes)
+    internal_routing = configure_internal_routing(
+        transit_as,
+        topology,
+        mode=args.internal_routing,
+        route_reflector=args.route_reflector,
+    )
 
     for stub_asn, ix in zip(args.stub_asns, args.ixes):
         Makers.makeStubAsWithHosts(emu, base, stub_asn, ix, args.hosts_per_stub)
@@ -124,7 +142,7 @@ def build_emulator(args: argparse.Namespace):
     emu.addLayer(ebgp)
     emu.addLayer(Ibgp())
     emu.addLayer(Ospf())
-    return emu, topology
+    return emu, topology, internal_routing
 
 
 def apply_topology(base: Base, topology, asn: int, ixes: List[int]):
@@ -142,19 +160,69 @@ def apply_topology(base: Base, topology, asn: int, ixes: List[int]):
     return transit_as
 
 
-def write_topology_artifacts(topology, output_dir: Path) -> None:
+def configure_internal_routing(transit_as, topology, mode: str, route_reflector: str = None) -> Dict[str, Any]:
+    mode = mode.lower()
+    if mode == "full-mesh":
+        return {
+            "mode": "full-mesh",
+            "route_reflector": None,
+            "description": "default SEED Ibgp() full mesh among AS routers",
+        }
+
+    if mode != "rr":
+        raise ValueError("unsupported internal routing mode: {}".format(mode))
+
+    rr_name = route_reflector or choose_route_reflector(topology)
+    if rr_name not in set(topology.routers()):
+        raise ValueError("unknown route reflector router: {}".format(rr_name))
+
+    cluster_id = route_reflector_cluster_id(transit_as.getAsn())
+    transit_as.createBgpCluster(cluster_id)
+    for router_name in topology.routers():
+        router = transit_as.getRouter(router_name).joinBgpCluster(cluster_id)
+        if router_name == rr_name:
+            router.makeRouteReflector()
+
+    return {
+        "mode": "rr",
+        "route_reflector": rr_name,
+        "cluster_id": cluster_id,
+        "description": "one generated router is the route reflector; all other AS routers are clients",
+    }
+
+
+def choose_route_reflector(topology) -> str:
+    graph = topology.graph()
+    candidates = topology.internal_routers() or topology.routers()
+    return sorted(candidates, key=lambda router: (-graph.degree(router), router))[0]
+
+
+def route_reflector_cluster_id(asn: int) -> str:
+    return "10.{}.{}.1".format((int(asn) // 256) % 256, int(asn) % 256)
+
+
+def write_topology_artifacts(topology, output_dir: Path, internal_routing: Dict[str, Any]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    data = topology.to_dict()
+    data["internal_routing"] = internal_routing
     with open(output_dir / "topology.json", "w", encoding="utf-8") as file:
-        json.dump(topology.to_dict(), file, indent=2, sort_keys=True)
+        json.dump(data, file, indent=2, sort_keys=True)
 
     with open(output_dir / "topology.txt", "w", encoding="utf-8") as file:
         file.write(topology.summary())
+        file.write("\n")
+        file.write("internal routing: {}".format(internal_routing["mode"]))
+        if internal_routing.get("route_reflector"):
+            file.write(" via {} cluster {}".format(
+                internal_routing["route_reflector"],
+                internal_routing["cluster_id"],
+            ))
         file.write("\n")
 
 
 def main() -> int:
     args = parse_args()
-    emu, topology = build_emulator(args)
+    emu, topology, internal_routing = build_emulator(args)
 
     if args.dumpfile:
         emu.dump(args.dumpfile)
@@ -166,8 +234,14 @@ def main() -> int:
     output_dir = Path(args.output).resolve()
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     emu.compile(Docker(platform=resolve_platform(args.platform)), str(output_dir), override=args.override)
-    write_topology_artifacts(topology, output_dir)
+    write_topology_artifacts(topology, output_dir, internal_routing)
     print(topology.summary())
+    print("Internal routing mode: {}".format(internal_routing["mode"]))
+    if internal_routing.get("route_reflector"):
+        print("Route reflector: {} ({})".format(
+            internal_routing["route_reflector"],
+            internal_routing["cluster_id"],
+        ))
     print("Generated A15 Docker output in {}".format(output_dir))
     return 0
 

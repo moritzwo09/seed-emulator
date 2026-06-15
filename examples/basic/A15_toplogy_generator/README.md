@@ -46,6 +46,8 @@ Important options:
 - `--graph-model MODEL`: NetworkX model or alias.
 - `--graph-param KEY=VALUE`: parameter passed to the graph model. Can be repeated.
 - `--ebgp-attach-policy spread|round_robin|random|degree`: how eBGP routers attach to internal routers.
+- `--internal-routing full-mesh|rr`: iBGP design inside the generated AS.
+- `--route-reflector ROUTER`: route reflector router name when using `--internal-routing rr`.
 
 Example using a scale-free-style core:
 
@@ -81,8 +83,48 @@ python examples/basic/A15_toplogy_generator/topology_generator.py \
   --hosts-per-stub 2
 ```
 
-This example intentionally keeps the default SEED `Ibgp()` behavior, which
-creates full-mesh iBGP among routers in the generated transit AS.
+Without extra options, this example keeps the default SEED `Ibgp()` behavior,
+which creates full-mesh iBGP among routers in the generated transit AS.
+
+## Internal Routing Modes
+
+A15 can use the same generated physical topology with two different iBGP
+control-plane designs.
+
+### Full-Mesh iBGP
+
+```sh
+python examples/basic/A15_toplogy_generator/topology_generator.py \
+  --internal-routing full-mesh
+```
+
+This is the default mode. Every router in the generated AS participates in the
+SEED `Ibgp()` full mesh. It is easy to understand and useful for small
+topologies, but the number of iBGP sessions grows quickly as the AS gets larger.
+
+### Route Reflector
+
+```sh
+python examples/basic/A15_toplogy_generator/topology_generator.py \
+  --internal-routing rr
+```
+
+In this mode, the example creates one BGP cluster. One generated internal router
+is selected as the route reflector, and all routers in the generated AS join the
+cluster as route-reflector clients. By default, the selected reflector is a
+high-degree internal router, because that is usually a natural place to
+centralize control-plane sessions in a generated topology.
+
+You can choose the reflector explicitly:
+
+```sh
+python examples/basic/A15_toplogy_generator/topology_generator.py \
+  --internal-routing rr \
+  --route-reflector core0
+```
+
+The selected mode is recorded in `output/topology.json` and
+`output/topology.txt`, so CI logs and manual experiments can be compared later.
 
 ## Code Pattern
 
@@ -108,6 +150,14 @@ for left, right, network in topology.link_networks():
     transit_as.createNetwork(network)
     routers[left].joinNetwork(network)
     routers[right].joinNetwork(network)
+
+if args.internal_routing == "rr":
+    cluster_id = "10.2.0.1"
+    transit_as.createBgpCluster(cluster_id)
+    for router_name in topology.routers():
+        router = transit_as.getRouter(router_name).joinBgpCluster(cluster_id)
+        if router_name == "core0":
+            router.makeRouteReflector()
 ```
 
 The generator first creates a reusable topology object. The topology can be
