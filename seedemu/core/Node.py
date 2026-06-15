@@ -1100,6 +1100,18 @@ RouterFileTemplates['rw_configure_script'] = '''\
 #!/bin/bash
 '''
 
+ROUTER_CONTROL_PLANE_ROLE_EDGE = "edge"
+ROUTER_CONTROL_PLANE_ROLE_CORE = "core"
+ROUTER_CONTROL_PLANE_ROLE_RR = "rr"
+ROUTER_CONTROL_PLANE_ROLE_RR_CLIENT = "rr-client"
+
+ROUTER_CONTROL_PLANE_ROLES = {
+    ROUTER_CONTROL_PLANE_ROLE_EDGE,
+    ROUTER_CONTROL_PLANE_ROLE_CORE,
+    ROUTER_CONTROL_PLANE_ROLE_RR,
+    ROUTER_CONTROL_PLANE_ROLE_RR_CLIENT,
+}
+
 fill_placeholder = """\
 gw="`ip rou show default | cut -d' ' -f3`"
 if [ -z "$gw" ]; then
@@ -1137,6 +1149,8 @@ class Router(Node):
     __is_bgp_rr: bool
     __bgp_cluster_id: Optional[str]
     __routing_backend: str
+    __control_plane_role: Optional[str]
+    __disabled_control_planes: Set[str]
     __extensions: Dict[str, RouterExtension]
 
     def __init__(self, name: str, role: NodeRole, asn: int, scope: str = None, routingBackend: str = "bird"):
@@ -1145,9 +1159,68 @@ class Router(Node):
         self.__is_bgp_rr = False
         self.__bgp_cluster_id = None
         self.__routing_backend = "bird"
+        self.__control_plane_role = None
+        self.__disabled_control_planes = set()
         self.__extensions = {}
         super().__init__( name,role,asn,scope)
         self.setRoutingBackend(routingBackend)
+
+    def setControlPlaneRole(self, role: str) -> Router:
+        """!
+        @brief Set a routing control-plane role hint for this router.
+
+        This does not change legacy routing behavior by itself. Protocol layers
+        such as Ibgp may use the role in opt-in modes to decide whether this
+        router should participate as an edge, core, RR, or RR client node.
+
+        @param role edge, core, rr, or rr-client.
+
+        @returns self, for chaining API calls.
+        """
+        value = str(role or "").strip().lower()
+        assert value in ROUTER_CONTROL_PLANE_ROLES, "unsupported control-plane role: {}".format(role)
+        self.__control_plane_role = value
+        self.setLabel("seedemu_control_plane_role", value)
+        if value == ROUTER_CONTROL_PLANE_ROLE_RR:
+            self.makeRouteReflector()
+        return self
+
+    def getControlPlaneRole(self) -> Optional[str]:
+        """!
+        @brief Get this router's optional routing control-plane role hint.
+
+        @returns role name, or None if no role was set.
+        """
+        return self.__control_plane_role
+
+    def disableControlPlane(self, protocol: str) -> Router:
+        """!
+        @brief Disable a protocol-layer participation hint on this router.
+
+        The first supported flag is ibgp. It lets new opt-in iBGP modes exclude
+        a specific router without changing AS-wide legacy defaults.
+
+        @param protocol protocol participation flag to disable.
+
+        @returns self, for chaining API calls.
+        """
+        value = str(protocol or "").strip().lower()
+        assert value in {"ibgp"}, "unsupported router control-plane disable flag: {}".format(protocol)
+        self.__disabled_control_planes.add(value)
+        self.setLabel("seedemu_control_plane_disabled_{}".format(value), "true")
+        return self
+
+    def isControlPlaneDisabled(self, protocol: str) -> bool:
+        """!
+        @brief Check whether a protocol-layer participation hint is disabled.
+        """
+        return str(protocol or "").strip().lower() in self.__disabled_control_planes
+
+    def getDisabledControlPlanes(self) -> Set[str]:
+        """!
+        @brief Get disabled protocol-layer participation hints.
+        """
+        return set(self.__disabled_control_planes)
 
     def makeRouteReflector(self, is_rr: bool = True) -> Router:
         """!

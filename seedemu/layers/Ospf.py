@@ -1,10 +1,14 @@
 from __future__ import annotations
 from seedemu.core import Node, Emulator, Layer
-from seedemu.core.enums import NetworkType
+from seedemu.core.enums import NetworkType, NodeRole
 from typing import Set, Dict, List, Tuple
 from ._bgp_metadata import classify_ospf_interfaces, set_ospf_interface_intents
 
 OspfFileTemplates: Dict[str, str] = {}
+
+OSPF_MODE_LEGACY = "legacy"
+OSPF_MODE_ROUTER_TRANSIT_ONLY = "router-transit-only"
+OSPF_MODES = {OSPF_MODE_LEGACY, OSPF_MODE_ROUTER_TRANSIT_ONLY}
 
 class Ospf(Layer):
     """!
@@ -21,6 +25,7 @@ class Ospf(Layer):
     __stubs: Set[Tuple[int, str]]
     __masked: Set[Tuple[int, str]]
     __masked_asn: Set[int]
+    __as_modes: Dict[int, str]
 
     def __init__(self):
         """!
@@ -30,11 +35,36 @@ class Ospf(Layer):
         self.__stubs = set()
         self.__masked = set()
         self.__masked_asn = set()
+        self.__as_modes = {}
 
         self.addDependency('Routing', False, False)
 
     def getName(self) -> str:
         return 'Ospf'
+
+    def setAsMode(self, asn: int, mode: str) -> Ospf:
+        """!
+        @brief Set OSPF interface classification mode for an AS.
+
+        The default legacy mode preserves historical behavior. The
+        router-transit-only mode makes only Local networks with at least two
+        router-like nodes active and keeps host-facing Local networks passive.
+
+        @param asn AS to configure.
+        @param mode legacy or router-transit-only.
+
+        @returns self, for chaining API calls.
+        """
+        value = str(mode or OSPF_MODE_LEGACY).strip().lower()
+        assert value in OSPF_MODES, "unsupported OSPF mode: {}".format(mode)
+        self.__as_modes[int(asn)] = value
+        return self
+
+    def getAsMode(self, asn: int) -> str:
+        """!
+        @brief Get OSPF interface classification mode for an AS.
+        """
+        return self.__as_modes.get(int(asn), OSPF_MODE_LEGACY)
 
     def markAsStub(self, asn: int, netname: str) -> Ospf:
         """!
@@ -124,6 +154,45 @@ class Ospf(Layer):
         """
         return (asn, netname) in self.__masked
 
+    def __is_router_transit_network(self, node: Node, netname: str) -> bool:
+        for iface in node.getInterfaces():
+            net = iface.getNet()
+            if str(net.getName()) != str(netname):
+                continue
+            if net.getType() != NetworkType.Local:
+                return False
+            router_count = 0
+            for candidate in net.getAssociations():
+                role = candidate.getRole()
+                if role in {NodeRole.Router, NodeRole.BorderRouter, NodeRole.OpenVpnRouter}:
+                    router_count += 1
+            return router_count >= 2
+        return False
+
+    def __classify_router_transit_interfaces(
+        self,
+        router: Node,
+        stubs: List[str],
+        masked: List[str]
+    ) -> Tuple[List[str], List[str]]:
+        stub_names = {str(name) for name in stubs}
+        masked_names = {str(name) for name in masked}
+        active: List[str] = []
+        passive: List[str] = ["dummy0"]
+        for iface in router.getInterfaces():
+            net = iface.getNet()
+            name = str(net.getName())
+            if name in masked_names:
+                continue
+            if name in stub_names:
+                passive.append(name)
+                continue
+            if self.__is_router_transit_network(router, name):
+                active.append(name)
+            else:
+                passive.append(name)
+        return active, passive
+
     def configure(self, emulator: Emulator):
         reg = emulator.getRegistry()
 
@@ -133,11 +202,20 @@ class Ospf(Layer):
             if router.getAsn() in self.__masked_asn: continue
 
             self._log('setting up OSPF for router as{}/{}...'.format(scope, name))
-            active, stubs = classify_ospf_interfaces(
-                router,
-                stubs=[net for (asn, net) in self.__stubs if asn == int(scope)],
-                masked=[net for (asn, net) in self.__masked if asn == int(scope)],
-            )
+            stub_networks = [net for (asn, net) in self.__stubs if asn == int(scope)]
+            masked_networks = [net for (asn, net) in self.__masked if asn == int(scope)]
+            if self.getAsMode(int(scope)) == OSPF_MODE_ROUTER_TRANSIT_ONLY:
+                active, stubs = self.__classify_router_transit_interfaces(
+                    router,
+                    stubs=stub_networks,
+                    masked=masked_networks,
+                )
+            else:
+                active, stubs = classify_ospf_interfaces(
+                    router,
+                    stubs=stub_networks,
+                    masked=masked_networks,
+                )
             set_ospf_interface_intents(router, active, stubs)
 
     def render(self, emulator: Emulator):

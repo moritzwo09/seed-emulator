@@ -4,6 +4,7 @@ from .Ibgp import Ibgp
 from seedemu.core import Node, ScopedRegistry, Graphable, Emulator, Layer, Router
 from seedemu.core.enums import NetworkType, NodeRole
 from typing import List, Tuple, Dict, Set
+from ._bgp_metadata import install_router_bgp_session
 
 MplsFileTemplates: Dict[str, str] = {}
 
@@ -39,18 +40,6 @@ interface {interface}
  ip ospf area 0
  ip ospf dead-interval minimal hello-multiplier 2
 """
-
-MplsFileTemplates['bird_ibgp_peer'] = '''
-    ipv4 {{
-        table t_bgp;
-        import all;
-        export all;
-        igp table master4;
-    }};
-    local {localAddress} as {asn};
-    neighbor {peerAddress} as {asn};
-'''
-
 
 class Mpls(Layer, Graphable):
     """!
@@ -192,6 +181,17 @@ class Mpls(Layer, Graphable):
 
         return (enodes, nodes)
 
+    def __addAdditionalEdges(self, scope: ScopedRegistry, asn: int, enodes: List[Node]) -> List[Node]:
+        names = {node.getName() for node in enodes}
+        for (asn_, nodename) in self.__additional_edges:
+            if asn_ != asn:
+                continue
+            if scope.has('rnode', nodename) and nodename not in names:
+                node = scope.get('rnode', nodename)
+                enodes.append(node)
+                names.add(nodename)
+        return enodes
+
     def __setUpLdpOspf(self, node: Router):
         """!
         @brief Setup LDP and OSPF on router.
@@ -242,20 +242,32 @@ class Mpls(Layer, Graphable):
             for remote in nodes:
                 if local == remote: continue
 
-                local.addTable('t_bgp')
-                local.addTablePipe('t_bgp')
-                local.addTablePipe('t_direct', 't_bgp')
-                local.addProtocol('bgp', 'ibgp{}'.format(n), MplsFileTemplates['bird_ibgp_peer'].format(
-                    localAddress = local.getLoopbackAddress(),
-                    peerAddress = remote.getLoopbackAddress(),
-                    asn = local.getAsn()
-                ))
+                install_router_bgp_session(
+                    local,
+                    {
+                        "name": "mpls_ibgp{}".format(n),
+                        "kind": "ibgp",
+                        "local_address": str(local.getLoopbackAddress()),
+                        "local_asn": local.getAsn(),
+                        "peer_address": str(remote.getLoopbackAddress()),
+                        "peer_asn": local.getAsn(),
+                        "export_policy": "all",
+                        "next_hop_self": False,
+                        "igp_table": "master4",
+                    },
+                )
 
                 n += 1
 
     def configure(self, emulator: Emulator):
         super().configure(emulator)
         self.__maskExistingControlPlaneLayers(emulator)
+        reg = emulator.getRegistry()
+        for asn in self.__enabled:
+            scope = ScopedRegistry(str(asn), reg)
+            (enodes, _) = self.__getEdgeNodes(scope)
+            enodes = self.__addAdditionalEdges(scope, asn, enodes)
+            self.__setUpIbgpMesh(enodes)
 
     def render(self, emulator: Emulator):
         reg = emulator.getRegistry()
@@ -263,15 +275,10 @@ class Mpls(Layer, Graphable):
         for asn in self.__enabled:
             scope = ScopedRegistry(str(asn), reg)
             (enodes, nodes) = self.__getEdgeNodes(scope)
-
-            for (asn_, nodename) in self.__additional_edges:
-                if asn_ != asn: continue
-                if scope.has('rnode', nodename):
-                    enodes.append(scope.get('rnode', nodename))
+            enodes = self.__addAdditionalEdges(scope, asn, enodes)
 
             for n in enodes: self.__setUpLdpOspf(n)
             for n in nodes: self.__setUpLdpOspf(n)
-            self.__setUpIbgpMesh(enodes)
 
     def _doCreateGraphs(self, emulator: Emulator):
         base = emulator.getRegistry().get('seedemu', 'layer', 'Base')
