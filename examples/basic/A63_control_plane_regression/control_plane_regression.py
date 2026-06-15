@@ -24,7 +24,7 @@ EXABGP_PREFIX = "198.51.100.0/24"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build the A14 control-plane regression example.")
+    parser = argparse.ArgumentParser(description="Build the A63 control-plane regression example.")
     parser.add_argument("legacy_platform", nargs="?", choices=["amd", "arm"])
     parser.add_argument("--platform", choices=["amd", "arm"])
     parser.add_argument("--output", default=str(SCRIPT_DIR / "output"))
@@ -188,7 +188,7 @@ def main() -> int:
 
     if args.dumpfile:
         emu.dump(args.dumpfile)
-        print("Saved A14 emulator to {}".format(args.dumpfile))
+        print("Saved A63 emulator to {}".format(args.dumpfile))
         return 0
 
     if args.render:
@@ -197,7 +197,7 @@ def main() -> int:
     output_dir = Path(args.output).resolve()
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     emu.compile(Docker(platform=resolve_platform(args.platform)), str(output_dir), override=args.override)
-    print("Generated A14 Docker output in {}".format(output_dir))
+    print("Generated A63 Docker output in {}".format(output_dir))
     return 0
 
 

@@ -145,7 +145,7 @@ def main() -> int:
     if as20_r4:
         test.exec_check("AS20 r4 has MPLS/LDP on net2", as20_r4, "grep -q '^net2$' /mpls_ifaces.txt && grep -q 'mpls ldp' /etc/frr/frr.conf")
 
-    test.write_summary("a14-control-plane-runtime-test.json")
+    test.write_summary("a63-control-plane-runtime-test.json")
     return test.exit_code()
 
 
