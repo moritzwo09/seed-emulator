@@ -3,7 +3,7 @@
 This example demonstrates `AutonomousSystemTopologyGenerator`, a NetworkX-based
 helper for generating the internal topology of an autonomous system.
 
-The example creates:
+The example by default creates:
 
 ```text
 AS2: generated transit AS
@@ -31,7 +31,8 @@ output/topology.txt
 ```
 
 These files record the generated routers, links, eBGP-to-internal attachment
-mapping, seed, graph model, and graph parameters.
+mapping, seed, graph model, graph parameters, internal routing mode, and router
+locations.
 
 ## Command-Line Controls
 
@@ -41,13 +42,15 @@ Important options:
 - `--asn N`: transit AS number, default `2`.
 - `--ebgp-routers N`: number of eBGP routers generated for the transit AS.
 - `--ixes 100,101,102`: IXes where this example manually connects the generated eBGP routers.
-- `--stub-asns 150,151,152`: stub ASes connected to those IXes.
+- `--stub-asns 150,151,152`: stub ASes connected to those IXes (by default, one stuf asn for each ix).
 - `--internal-routers N`: number of generated internal routers.
 - `--graph-model MODEL`: NetworkX model or alias.
 - `--graph-param KEY=VALUE`: parameter passed to the graph model. Can be repeated.
 - `--ebgp-attach-policy spread|round_robin|random|degree`: how eBGP routers attach to internal routers.
-- `--internal-routing full-mesh|rr`: iBGP design inside the generated AS.
+- `--internal-routing full-mesh|rr`: iBGP design inside the generated AS (full mesh or route reflector).
 - `--route-reflector ROUTER`: route reflector router name when using `--internal-routing rr`.
+- `--router-location ROUTER=LAT,LON`: known router location used to anchor generated positions. Can be repeated.
+- `--no-locations`: skip location generation.
 
 Example using a scale-free-style core:
 
@@ -126,9 +129,52 @@ python examples/basic/A15_toplogy_generator/topology_generator.py \
 The selected mode is recorded in `output/topology.json` and
 `output/topology.txt`, so CI logs and manual experiments can be compared later.
 
+## Location Generation
+
+A15 keeps topology generation and location generation separate. The topology
+generator first creates routers and links. After that, the example uses
+`AutonomousSystemLocationGenerator` to assign positions to all routers.
+
+Known router locations are fixed. Missing router locations are generated with
+NetworkX `spring_layout`, using the fixed routers as anchors. This means the
+known eBGP locations stay where the user put them, while internal routers are
+placed in positions that are consistent with the graph structure.
+
+By default, this example anchors `r0`, `r1`, and `r2` to sample city locations:
+
+```text
+r0: New York
+r1: Chicago
+r2: Los Angeles
+```
+
+You can override or add anchors:
+
+```sh
+python examples/basic/A15_toplogy_generator/topology_generator.py \
+  --router-location r0=40.7128,-74.0060 \
+  --router-location r1=41.8781,-87.6298 \
+  --router-location r2=34.0522,-118.2437
+```
+
+The generated locations are written to `output/topology.json` under
+`locations`. They are metadata only; they do not change links, routing, BGP
+sessions, OSPF, or Docker network generation.
+
+The example also stores the coordinates on each generated router node with
+`setGeo()` and `setLabel()`. The Docker compiler writes those labels into
+`output/docker-compose.yml`:
+
+```yaml
+org.seedsecuritylabs.seedemu.meta.geo.lat: "40.712800"
+org.seedsecuritylabs.seedemu.meta.geo.lon: "-74.006000"
+org.seedsecuritylabs.seedemu.meta.geo.source: "fixed"
+org.seedsecuritylabs.seedemu.meta.geo.label: "New York"
+```
+
 ## Code Pattern
 
-The core pattern is:
+The core pattern is the following. The generator first creates a reusable topology object. The topology can be validated, exported, and inspected. 
 
 ```python
 topology = AutonomousSystemTopologyGenerator(
@@ -158,14 +204,26 @@ if args.internal_routing == "rr":
         router = transit_as.getRouter(router_name).joinBgpCluster(cluster_id)
         if router_name == "core0":
             router.makeRouteReflector()
+
+locations = AutonomousSystemLocationGenerator(
+    fixed_locations={
+        "r0": {"lat": 40.7128, "lon": -74.0060},
+        "r1": {"lat": 41.8781, "lon": -87.6298},
+        "r2": {"lat": 34.0522, "lon": -118.2437},
+    },
+    seed=args.seed,
+).generate(topology)
+
+for router_name, location in locations.items():
+    router = transit_as.getRouter(router_name)
+    router.setGeo(location["lat"], location["lon"])
+    router.setLabel("geo.lat", str(location["lat"]))
+    router.setLabel("geo.lon", str(location["lon"]))
+    router.setLabel("geo.source", location["source"])
 ```
 
-The generator first creates a reusable topology object. The topology can be
-validated, exported, and inspected. This example uses the manual implementation
-because the generator no longer knows which IXes the eBGP routers should join.
 
-`link_networks()` returns safe network names that fit Linux's 15-character
-interface-name limit.
+
 
 ## TestRunner Lifecycle
 
