@@ -116,6 +116,7 @@ def build_emulator(args: argparse.Namespace):
     for ix in args.ixes:
         base.createInternetExchange(ix)
 
+    # Generate the network topology
     topology = AutonomousSystemTopologyGenerator(
         ebgp_router_count=args.ebgp_routers,
         internal_router_count=args.internal_routers,
@@ -125,7 +126,10 @@ def build_emulator(args: argparse.Namespace):
         seed=args.seed,
     ).generate()
 
+    # Create routers, networks, and connections based on the topology
     transit_as = apply_topology(base, topology, args.asn, args.ixes)
+    
+    # Configure internal iBGP setup (full mesh or route reflector)
     internal_routing = configure_internal_routing(
         transit_as,
         topology,
@@ -133,6 +137,7 @@ def build_emulator(args: argparse.Namespace):
         route_reflector=args.route_reflector,
     )
 
+    # Create stub ASes and peer them with the transit AS
     for stub_asn, ix in zip(args.stub_asns, args.ixes):
         Makers.makeStubAsWithHosts(emu, base, stub_asn, ix, args.hosts_per_stub)
         ebgp.addPrivatePeering(ix, args.asn, stub_asn, PeerRelationship.Provider)
@@ -147,11 +152,15 @@ def build_emulator(args: argparse.Namespace):
 
 def apply_topology(base: Base, topology, asn: int, ixes: List[int]):
     transit_as = base.createAutonomousSystem(asn)
+    
+    # Create all the routers in the topology
     routers = {name: transit_as.createRouter(name) for name in topology.routers()}
 
+    # Connect ebgp routers to the IXes
     for ebgp_router, ix in zip(topology.ebgp_routers(), ixes):
         routers[ebgp_router].joinNetwork("ix{}".format(ix))
 
+    # Create networks and connect routers to them
     for left, right, network in topology.link_networks():
         transit_as.createNetwork(network)
         routers[left].joinNetwork(network)
@@ -172,10 +181,12 @@ def configure_internal_routing(transit_as, topology, mode: str, route_reflector:
     if mode != "rr":
         raise ValueError("unsupported internal routing mode: {}".format(mode))
 
+    # Use provided or chosen router as the route reflector
     rr_name = route_reflector or choose_route_reflector(topology)
     if rr_name not in set(topology.routers()):
         raise ValueError("unknown route reflector router: {}".format(rr_name))
 
+    # Create cluster and let router join cluster
     cluster_id = route_reflector_cluster_id(transit_as.getAsn())
     transit_as.createBgpCluster(cluster_id)
     for router_name in topology.routers():

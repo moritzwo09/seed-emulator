@@ -3,7 +3,7 @@
 This example demonstrates `AutonomousSystemTopologyGenerator`, a NetworkX-based
 helper for generating the internal topology of an autonomous system.
 
-The example creates:
+The example by default creates:
 
 ```text
 AS2: generated transit AS
@@ -41,12 +41,12 @@ Important options:
 - `--asn N`: transit AS number, default `2`.
 - `--ebgp-routers N`: number of eBGP routers generated for the transit AS.
 - `--ixes 100,101,102`: IXes where this example manually connects the generated eBGP routers.
-- `--stub-asns 150,151,152`: stub ASes connected to those IXes.
+- `--stub-asns 150,151,152`: stub ASes connected to those IXes (by default, one stuf asn for each ix).
 - `--internal-routers N`: number of generated internal routers.
 - `--graph-model MODEL`: NetworkX model or alias.
 - `--graph-param KEY=VALUE`: parameter passed to the graph model. Can be repeated.
 - `--ebgp-attach-policy spread|round_robin|random|degree`: how eBGP routers attach to internal routers.
-- `--internal-routing full-mesh|rr`: iBGP design inside the generated AS.
+- `--internal-routing full-mesh|rr`: iBGP design inside the generated AS (full mesh or route reflector).
 - `--route-reflector ROUTER`: route reflector router name when using `--internal-routing rr`.
 
 Example using a scale-free-style core:
@@ -128,7 +128,7 @@ The selected mode is recorded in `output/topology.json` and
 
 ## Code Pattern
 
-The core pattern is:
+The core pattern is the following. The generator first creates a reusable topology object. The topology can be validated, exported, and inspected. 
 
 ```python
 topology = AutonomousSystemTopologyGenerator(
@@ -160,12 +160,8 @@ if args.internal_routing == "rr":
             router.makeRouteReflector()
 ```
 
-The generator first creates a reusable topology object. The topology can be
-validated, exported, and inspected. This example uses the manual implementation
-because the generator no longer knows which IXes the eBGP routers should join.
 
-`link_networks()` returns safe network names that fit Linux's 15-character
-interface-name limit.
+
 
 ## TestRunner Lifecycle
 
