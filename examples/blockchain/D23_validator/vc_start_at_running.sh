@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 ########################################
 # Config
@@ -9,19 +9,32 @@ set -e
 TESTNET_DIR="/tmp/vc/local-testnet/testnet"
 DATADIR="/tmp/vc/local-testnet/testnet"
 
-BEACON_NODE="http://10.151.0.72:8000"
-GETH_RPC="http://10.150.0.72:8545"
+BEACON_NODE="${D23_BEACON_NODE:-http://10.151.0.72:8000}"
+GETH_RPC="${D23_GETH_RPC:-http://10.150.0.72:8545}"
 
 WITHDRAW_ADDRESS_FILE="/tmp/withdraw-address"
 
 WALLET_NAME="seed"
 WALLET_PASSWORD_FILE="/tmp/seed.pass"
+WALLET_MNEMONIC_FILE="/tmp/validator-at-running-wallet.mnemonic"
+VALIDATOR_MNEMONIC_FILE="${D23_VALIDATOR_MNEMONIC_FILE:-/tmp/validator-at-running.mnemonic}"
+VALIDATOR_MNEMONIC="${D23_VALIDATOR_MNEMONIC:-abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about}"
 
 NEW_VALIDATOR_DIR="/tmp/new_validators"
 VC_HTTP_PORT="5062"
+DEPOSIT_RESULT_FILE="/tmp/d23_deposit_result.json"
 
 export GETH_RPC
-export KEYSTORE_PASSWORD="admin"
+export KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD:-admin}"
+
+########################################
+# Prepare deterministic non-interactive input
+########################################
+
+if [ ! -s "${VALIDATOR_MNEMONIC_FILE}" ]; then
+    printf '%s\n' "${VALIDATOR_MNEMONIC}" > "${VALIDATOR_MNEMONIC_FILE}"
+    chmod 600 "${VALIDATOR_MNEMONIC_FILE}"
+fi
 
 ########################################
 # Get FEE_RECIPIENT from first keystore
@@ -56,33 +69,24 @@ echo "[INFO] FEE_RECIPIENT=${FEE_RECIPIENT}"
 # Create wallet if not exists
 ########################################
 
-if [ ! -d "${DATADIR}/wallets/${WALLET_NAME}" ]; then
+if lighthouse account_manager wallet list --testnet-dir "${TESTNET_DIR}" --datadir "${DATADIR}" 2>/dev/null | grep -qx "${WALLET_NAME}"; then
+    echo "[INFO] wallet already exists"
+else
     echo "[INFO] creating lighthouse wallet..."
 
-    lighthouse account_manager wallet create \
-      --testnet-dir "${TESTNET_DIR}" \
-      --datadir "${DATADIR}" \
-      --name "${WALLET_NAME}" \
-      --password-file "${WALLET_PASSWORD_FILE}"
-else
-    echo "[INFO] wallet already exists"
+    lighthouse account_manager wallet create --testnet-dir "${TESTNET_DIR}" --datadir "${DATADIR}" --name "${WALLET_NAME}" --password-file "${WALLET_PASSWORD_FILE}" --mnemonic-output-path "${WALLET_MNEMONIC_FILE}"
 fi
 
 ########################################
 # Create validator-manager validator
 ########################################
 
+rm -rf "${NEW_VALIDATOR_DIR}"
 mkdir -p "${NEW_VALIDATOR_DIR}"
 
 echo "[INFO] creating validator-manager validator..."
 
-lighthouse validator-manager create \
-  --testnet-dir "${TESTNET_DIR}" \
-  --first-index 0 \
-  --count 1 \
-  --eth1-withdrawal-address "$(cat ${WITHDRAW_ADDRESS_FILE})" \
-  --suggested-fee-recipient "${FEE_RECIPIENT}" \
-  --output-path "${NEW_VALIDATOR_DIR}"
+lighthouse validator-manager create   --testnet-dir "${TESTNET_DIR}"   --mnemonic-path "${VALIDATOR_MNEMONIC_FILE}"   --stdin-inputs   --first-index 0   --count 1   --eth1-withdrawal-address "$(cat ${WITHDRAW_ADDRESS_FILE})"   --suggested-fee-recipient "${FEE_RECIPIENT}"   --output-path "${NEW_VALIDATOR_DIR}"
 
 ########################################
 # Start VC
@@ -92,21 +96,19 @@ echo "[INFO] starting validator client..."
 
 pkill -f "lighthouse.* vc" || true
 
-nohup lighthouse --debug-level info vc \
-  --datadir "${DATADIR}" \
-  --testnet-dir "${TESTNET_DIR}" \
-  --init-slashing-protection \
-  --beacon-nodes "${BEACON_NODE}" \
-  --suggested-fee-recipient "${FEE_RECIPIENT}" \
-  --http \
-  --http-address 0.0.0.0 \
-  --http-port "${VC_HTTP_PORT}" \
-  --http-allow-origin "*" \
-  --unencrypted-http-transport \
-  --enable-doppelganger-protection \
-  > /tmp/lighthouse-vc.log 2>&1 &
+nohup lighthouse --debug-level info vc   --datadir "${DATADIR}"   --testnet-dir "${TESTNET_DIR}"   --init-slashing-protection   --beacon-nodes "${BEACON_NODE}"   --suggested-fee-recipient "${FEE_RECIPIENT}"   --http   --http-address 0.0.0.0   --http-port "${VC_HTTP_PORT}"   --http-allow-origin "*"   --unencrypted-http-transport   --enable-doppelganger-protection   > /tmp/lighthouse-vc.log 2>&1 &
 
-sleep 10
+for i in $(seq 1 60); do
+    if [ -s "${DATADIR}/validators/api-token.txt" ] && pgrep -af "lighthouse.* vc" >/dev/null; then
+        break
+    fi
+    if [ "$i" -eq 60 ]; then
+        echo "[ERROR] validator client did not start or did not create an API token" >&2
+        tail -n 80 /tmp/lighthouse-vc.log >&2 || true
+        exit 1
+    fi
+    sleep 2
+done
 
 ########################################
 # Import validators
@@ -114,10 +116,17 @@ sleep 10
 
 echo "[INFO] importing validators into VC..."
 
-lighthouse validator-manager import \
-  --validators-file "${NEW_VALIDATOR_DIR}/validators.json" \
-  --vc-url "http://127.0.0.1:${VC_HTTP_PORT}" \
-  --vc-token "${DATADIR}/validators/api-token.txt"
+for i in $(seq 1 30); do
+    if lighthouse validator-manager import --validators-file "${NEW_VALIDATOR_DIR}/validators.json" --vc-url "http://127.0.0.1:${VC_HTTP_PORT}" --vc-token "${DATADIR}/validators/api-token.txt" --ignore-duplicates; then
+        break
+    fi
+    if [ "$i" -eq 30 ]; then
+        echo "[ERROR] failed to import validator key into validator client" >&2
+        tail -n 120 /tmp/lighthouse-vc.log >&2 || true
+        exit 1
+    fi
+    sleep 2
+done
 
 ########################################
 # Generate deposit script
@@ -134,6 +143,7 @@ from web3 import Web3
 
 RPC = os.environ.get("GETH_RPC", "http://10.150.0.72:8545")
 KEYSTORE_PASSWORD = os.environ.get("KEYSTORE_PASSWORD", "admin")
+RESULT_FILE = "/tmp/d23_deposit_result.json"
 
 DEPOSIT_CONTRACT = Web3.to_checksum_address(
     "0x00000000219ab540356cBB839Cbe05303d7705Fa"
@@ -276,8 +286,6 @@ if balance_before < max_cost:
         f"need about {w3.from_wei(max_cost, 'ether')} ETH"
     )
 
-log("transaction_object", json.dumps(tx, indent=2, default=json_default))
-
 signed = w3.eth.account.sign_transaction(tx, pk)
 raw = getattr(signed, "raw_transaction", None) or signed.rawTransaction
 
@@ -294,6 +302,7 @@ balance_after = w3.eth.get_balance(payer_addr)
 gas_used = receipt.get("gasUsed", 0)
 effective_gas_price = receipt.get("effectiveGasPrice", gas_price)
 fee_paid = gas_used * effective_gas_price
+success = receipt.status == 1
 
 print("\n========== DEPOSIT RESULT ==========")
 print("deposit_json:", deposit_path)
@@ -301,7 +310,7 @@ print("payer:", payer_addr)
 print("payer_keystore:", ks_path)
 print("tx_hash:", tx_hash_hex)
 print("status:", receipt.status)
-print("success:", receipt.status == 1)
+print("success:", success)
 
 print("\n========== BALANCE ==========")
 print("balance_before_wei:", balance_before)
@@ -314,10 +323,25 @@ print("effective_gas_price:", effective_gas_price)
 print("fee_paid_wei:", fee_paid)
 print("fee_paid_eth:", w3.from_wei(fee_paid, "ether"))
 
-print("\n========== RECEIPT ==========")
-print(json.dumps(dict(receipt), indent=2, default=json_default))
+summary = {
+    "deposit_json": deposit_path,
+    "payer": payer_addr,
+    "payer_keystore": ks_path,
+    "pubkey": entry["pubkey"],
+    "tx_hash": tx_hash_hex,
+    "status": int(receipt.status),
+    "success": bool(success),
+    "balance_before_wei": str(balance_before),
+    "balance_after_wei": str(balance_after),
+    "deposit_value_wei": str(value),
+    "gas_used": int(gas_used),
+    "effective_gas_price": str(effective_gas_price),
+    "fee_paid_wei": str(fee_paid),
+    "receipt_block_number": int(receipt.get("blockNumber", 0)),
+}
+open(RESULT_FILE, "w").write(json.dumps(summary, indent=2, sort_keys=True) + "\n")
 
-if receipt.status != 1:
+if not success:
     raise SystemExit("deposit transaction failed, status != 1")
 
 print("\n[INFO] deposit success")
