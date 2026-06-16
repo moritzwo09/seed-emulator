@@ -2,11 +2,7 @@ from __future__ import annotations
 from seedemu.core.enums import NetworkType, NodeRole
 from .Base import Base
 from seedemu.core import ScopedRegistry, Node, Graphable, Emulator, Layer
-from seedemu.core.Node import (
-    ROUTER_CONTROL_PLANE_ROLE_EDGE,
-    ROUTER_CONTROL_PLANE_ROLE_RR,
-    ROUTER_CONTROL_PLANE_ROLE_RR_CLIENT,
-)
+from seedemu.core.Node import ROUTER_CONTROL_PLANE_ROLE_EDGE
 from typing import Dict, List, Set, Tuple
 from ._bgp_metadata import install_router_bgp_session
 
@@ -141,6 +137,18 @@ class Ibgp(Layer, Graphable):
             return IBGP_MODE_DISABLED
         return self.__as_modes.get(int(asn), IBGP_MODE_LEGACY_FULL_MESH)
 
+    def getConfiguredAsMode(self, asn: int):
+        """!
+        @brief Get the compatibility-layer iBGP mode explicitly set here.
+
+        New code should prefer AutonomousSystem.setIbgpMode(...). This method
+        exists so layers that render before Ibgp can still honor legacy
+        Ibgp.setAsMode(...) calls.
+        """
+        if int(asn) in self.__masked:
+            return IBGP_MODE_DISABLED
+        return self.__as_modes.get(int(asn))
+
     def addParticipant(self, asn: int, routerName: str) -> Ibgp:
         """!
         @brief Mark a router as participating in an opt-in iBGP mode.
@@ -271,7 +279,15 @@ class Ibgp(Layer, Graphable):
             if router.getName() not in excluded and not self.__is_ibgp_disabled(router)
         ]
 
-    def __install_pair(self, asn: int, local: Node, remote: Node, name: str, next_hop_self: bool = False):
+    def __get_igp_table(self, emulator: Emulator, asn: int) -> str:
+        reg = emulator.getRegistry()
+        if reg.has('seedemu', 'layer', 'Mpls'):
+            mpls = reg.get('seedemu', 'layer', 'Mpls')
+            if hasattr(mpls, "getEnabled") and asn in mpls.getEnabled():
+                return "master4"
+        return "t_ospf"
+
+    def __install_pair(self, asn: int, local: Node, remote: Node, name: str, next_hop_self: bool = False, igp_table: str = "t_ospf"):
         laddr = local.getLoopbackAddress()
         raddr = remote.getLoopbackAddress()
         install_router_bgp_session(
@@ -285,17 +301,17 @@ class Ibgp(Layer, Graphable):
                 "peer_asn": asn,
                 "export_policy": "all",
                 "next_hop_self": next_hop_self,
-                "igp_table": "t_ospf",
+                "igp_table": igp_table,
             },
         )
 
-    def __render_pair_mesh(self, asn: int, routers: List[Node], name_prefix: str):
+    def __render_pair_mesh(self, asn: int, routers: List[Node], name_prefix: str, igp_table: str = "t_ospf"):
         for local in sorted(routers, key=lambda router: router.getName()):
             n = 1
             for remote in sorted(routers, key=lambda router: router.getName()):
                 if local == remote:
                     continue
-                self.__install_pair(asn, local, remote, "{}{}".format(name_prefix, n))
+                self.__install_pair(asn, local, remote, "{}{}".format(name_prefix, n), igp_table=igp_table)
                 n += 1
                 self._log('adding peering: {} <-> {} (ibgp, as{})'.format(
                     local.getLoopbackAddress(), remote.getLoopbackAddress(), asn
@@ -305,33 +321,37 @@ class Ibgp(Layer, Graphable):
         reg = emulator.getRegistry()
         base: Base = reg.get('seedemu', 'layer', 'Base')
         for asn in base.getAsns():
-            mode = self.getAsMode(asn)
+            asobj = base.getAutonomousSystem(asn)
+            if int(asn) in self.__as_modes:
+                asobj.setIbgpMode(self.__as_modes[int(asn)])
+            mode = IBGP_MODE_DISABLED if asn in self.__masked else asobj.getIbgpMode()
             if mode == IBGP_MODE_DISABLED: continue
 
             self._log('setting up IBGP peering for as{}...'.format(asn))
             routers: List[Node] = ScopedRegistry(str(asn), reg).getByType('rnode')
             routers_map: Dict[str, Node] = {router.getName(): router for router in routers}
+            igp_table = self.__get_igp_table(emulator, asn)
 
             if mode == IBGP_MODE_EDGE_FULL_MESH:
-                self._render_edge_full_mesh_mode(asn, routers_map)
+                self._render_edge_full_mesh_mode(asn, routers_map, igp_table)
                 continue
 
             if mode == IBGP_MODE_EXPLICIT:
-                self._render_explicit_mode(asn, routers_map)
+                self._render_explicit_mode(asn, routers_map, igp_table)
                 continue
 
             if mode == IBGP_MODE_ROUTE_REFLECTOR:
-                self._render_explicit_rr_mode(asn, routers_map)
+                self._render_explicit_rr_mode(asn, routers_map, igp_table)
                 continue
 
             clusters = base.getAutonomousSystem(asn)._aggregateBgpClusters()
             has_rr = any(len(rrs) > 0 for rrs, _ in clusters.values())
             if has_rr:
-                self._render_rr_mode(asn, clusters, routers_map)
+                self._render_rr_mode(asn, clusters, routers_map, igp_table)
             else:
-                self._render_full_mesh_mode(asn, self.__get_legacy_router_list(asn, routers, routers_map))
+                self._render_full_mesh_mode(asn, self.__get_legacy_router_list(asn, routers, routers_map), igp_table)
 
-    def _render_edge_full_mesh_mode(self, asn: int, routers_map: Dict[str, Node]):
+    def _render_edge_full_mesh_mode(self, asn: int, routers_map: Dict[str, Node], igp_table: str = "t_ospf"):
         """!
         @brief Render iBGP full mesh for edge participants.
         """
@@ -342,9 +362,9 @@ class Ibgp(Layer, Graphable):
         )
         routers = [routers_map[name] for name in sorted(names)]
         self._log('setting up IBGP (Edge Full Mesh) for as{}: {}'.format(asn, sorted(names)))
-        self.__render_pair_mesh(asn, routers, "ibgp_edge")
+        self.__render_pair_mesh(asn, routers, "ibgp_edge", igp_table)
 
-    def _render_explicit_mode(self, asn: int, routers_map: Dict[str, Node]):
+    def _render_explicit_mode(self, asn: int, routers_map: Dict[str, Node], igp_table: str = "t_ospf"):
         """!
         @brief Render only explicitly declared iBGP router pairs.
         """
@@ -365,13 +385,13 @@ class Ibgp(Layer, Graphable):
 
             local = routers_map[local_name]
             peer = routers_map[peer_name]
-            self.__install_pair(asn, local, peer, "Ibgp_explicit_{}".format(peer_name))
-            self.__install_pair(asn, peer, local, "Ibgp_explicit_{}".format(local_name))
+            self.__install_pair(asn, local, peer, "Ibgp_explicit_{}".format(peer_name), igp_table=igp_table)
+            self.__install_pair(asn, peer, local, "Ibgp_explicit_{}".format(local_name), igp_table=igp_table)
             self._log('adding explicit peering: {} <-> {} (ibgp, as{})'.format(
                 local.getLoopbackAddress(), peer.getLoopbackAddress(), asn
             ))
 
-    def _render_explicit_rr_mode(self, asn: int, routers_map: Dict[str, Node]):
+    def _render_explicit_rr_mode(self, asn: int, routers_map: Dict[str, Node], igp_table: str = "t_ospf"):
         """!
         @brief Render Route Reflector mode without implicit default-cluster clients.
         """
@@ -383,13 +403,6 @@ class Ibgp(Layer, Graphable):
                 if (
                     router.getBgpClusterId() is not None
                     or router.isRouteReflector()
-                    or (
-                        hasattr(router, "getControlPlaneRole")
-                        and router.getControlPlaneRole() in {
-                            ROUTER_CONTROL_PLANE_ROLE_RR,
-                            ROUTER_CONTROL_PLANE_ROLE_RR_CLIENT,
-                        }
-                    )
                 )
             } - self.__excluded.get(asn, set())
             names = {
@@ -416,9 +429,9 @@ class Ibgp(Layer, Graphable):
             assert len(rrs) > 0, "AS{} cluster {} is missing a route reflector".format(asn, cluster_id)
             assert len(clients) > 0, "AS{} cluster {} is missing route-reflector clients".format(asn, cluster_id)
 
-        self._render_rr_mode(asn, clusters, routers_map)
+        self._render_rr_mode(asn, clusters, routers_map, igp_table)
 
-    def _render_rr_mode(self, asn: int, clusters: Dict[str, Tuple[Set[str], Set[str]]], routers_map: Dict[str, Node]):
+    def _render_rr_mode(self, asn: int, clusters: Dict[str, Tuple[Set[str], Set[str]]], routers_map: Dict[str, Node], igp_table: str = "t_ospf"):
         """!
         @brief Render Route Reflector based iBGP sessions for one AS.
 
@@ -457,7 +470,7 @@ class Ibgp(Layer, Graphable):
                             "peer_asn": asn,
                             "export_policy": "all",
                             "next_hop_self": False,
-                            "igp_table": "t_ospf",
+                            "igp_table": igp_table,
                             "passive": True,
                             "route_reflector_client": True,
                             "route_reflector_cluster_id": cluster_id,
@@ -474,7 +487,7 @@ class Ibgp(Layer, Graphable):
                             "peer_asn": asn,
                             "export_policy": "all",
                             "next_hop_self": True,
-                            "igp_table": "t_ospf",
+                            "igp_table": igp_table,
                         },
                     )
 
@@ -505,7 +518,7 @@ class Ibgp(Layer, Graphable):
                         "peer_asn": asn,
                         "export_policy": "all",
                         "next_hop_self": False,
-                        "igp_table": "t_ospf",
+                        "igp_table": igp_table,
                     },
                 )
                 install_router_bgp_session(
@@ -519,7 +532,7 @@ class Ibgp(Layer, Graphable):
                         "peer_asn": asn,
                         "export_policy": "all",
                         "next_hop_self": False,
-                        "igp_table": "t_ospf",
+                        "igp_table": igp_table,
                     },
                 )
 
@@ -529,7 +542,7 @@ class Ibgp(Layer, Graphable):
                     )
                 )
 
-    def _render_full_mesh_mode(self, asn: int, routers: List[Node]):
+    def _render_full_mesh_mode(self, asn: int, routers: List[Node], igp_table: str = "t_ospf"):
         """!
         @brief Render the legacy full-mesh iBGP sessions for one AS.
 
@@ -565,7 +578,7 @@ class Ibgp(Layer, Graphable):
                         "peer_asn": asn,
                         "export_policy": "all",
                         "next_hop_self": False,
-                        "igp_table": "t_ospf",
+                        "igp_table": igp_table,
                     },
                 )
 
@@ -579,9 +592,11 @@ class Ibgp(Layer, Graphable):
     def _doCreateGraphs(self, emulator: Emulator):
         base: Base = emulator.getRegistry().get('seedemu', 'layer', 'Base')
         for asn in base.getAsns():
-            mode = self.getAsMode(asn)
-            if mode == IBGP_MODE_DISABLED: continue
             asobj = base.getAutonomousSystem(asn)
+            if int(asn) in self.__as_modes:
+                asobj.setIbgpMode(self.__as_modes[int(asn)])
+            mode = IBGP_MODE_DISABLED if asn in self.__masked else asobj.getIbgpMode()
+            if mode == IBGP_MODE_DISABLED: continue
             asobj.createGraphs(emulator)
             l2graph = asobj.getGraph('AS{}: Layer 2 Connections'.format(asn))
             ibgpgraph = self._addGraph('AS{}: iBGP sessions'.format(asn), False)
@@ -621,13 +636,6 @@ class Ibgp(Layer, Graphable):
                         if (
                             router.getBgpClusterId() is not None
                             or router.isRouteReflector()
-                            or (
-                                hasattr(router, "getControlPlaneRole")
-                                and router.getControlPlaneRole() in {
-                                    ROUTER_CONTROL_PLANE_ROLE_RR,
-                                    ROUTER_CONTROL_PLANE_ROLE_RR_CLIENT,
-                                }
-                            )
                         )
                     } - excluded
                     names = {

@@ -222,22 +222,22 @@ class Routing(Layer):
 
     def _configure_rs(self, rs_node: Node):
         backend = get_bgp_backend(rs_node)
-        if backend == BGP_BACKEND_FRR:
-            raise NotImplementedError("FRR route-server nodes are not supported yet; use BIRD route servers")
-        rs_node.appendStartCommand('[ ! -d /run/bird ] && mkdir /run/bird')
-        rs_node.appendStartCommand('bird -d', True)
-        self._log("Bootstrapping bird.conf for RS {}...".format(rs_node.getName()))
-
         rs_ifaces = rs_node.getInterfaces()
         assert len(rs_ifaces) == 1, "rs node {} has != 1 interfaces".format(rs_node.getName())
-
         rs_iface = rs_ifaces[0]
 
         assert issubclass(rs_node.__class__, Router)
         rs_node.setBorderRouter(True)
-        rs_node.setFile("/etc/bird/bird.conf", RoutingFileTemplates["rs_bird"].format(
-            routerId = rs_iface.getAddress()
-        ))
+        if backend == BGP_BACKEND_BIRD:
+            rs_node.appendStartCommand('[ ! -d /run/bird ] && mkdir /run/bird')
+            rs_node.appendStartCommand('bird -d', True)
+            self._log("Bootstrapping bird.conf for RS {}...".format(rs_node.getName()))
+            rs_node.setFile("/etc/bird/bird.conf", RoutingFileTemplates["rs_bird"].format(
+                routerId = rs_iface.getAddress()
+            ))
+        else:
+            self._log("Bootstrapping frr.conf for RS {}...".format(rs_node.getName()))
+            self._configure_frr_router(rs_node)
 
     def _configure_bird_router(self, rnode: Router):
         ifaces = ''
@@ -349,14 +349,17 @@ class Routing(Layer):
                 customer_comm="{}:1:0".format(router.getAsn()),
             )
         )
-        connected_body, has_connected = self._render_frr_connected_export(router)
+        if has_bgp_connected_export(router):
+            connected_body, has_connected = self._render_frr_connected_export(router)
+        else:
+            connected_body, has_connected = "", False
         body.append(connected_body)
         route_maps, map_names = self._render_frr_route_maps(router.getAsn(), sessions)
         body.append(route_maps)
 
         bgp: List[str] = [
             "router bgp {}".format(router.getAsn()),
-            " bgp router-id {}".format(router.getLoopbackAddress()),
+            " bgp router-id {}".format(self._get_frr_router_id(router)),
             " no bgp ebgp-requires-policy",
             " no bgp default ipv4-unicast",
         ]
@@ -389,6 +392,8 @@ class Routing(Layer):
             bgp.append("  neighbor {} activate".format(session["peer_address"]))
             if session["next_hop_self"]:
                 bgp.append("  neighbor {} next-hop-self".format(session["peer_address"]))
+            if session["route_server_client"]:
+                bgp.append("  neighbor {} route-server-client".format(session["peer_address"]))
             if session["route_reflector_client"]:
                 bgp.append("  neighbor {} route-reflector-client".format(session["peer_address"]))
             if maps.get("import"):
@@ -399,6 +404,14 @@ class Routing(Layer):
         bgp.append("!")
         body.append("\n".join(bgp) + "\n")
         return "".join(body)
+
+    def _get_frr_router_id(self, router: Router) -> str:
+        loopback = router.getLoopbackAddress()
+        if loopback is not None:
+            return str(loopback)
+        ifaces = router.getInterfaces()
+        assert len(ifaces) > 0, "router node {}/{} has no interfaces".format(router.getAsn(), router.getName())
+        return str(ifaces[0].getAddress())
 
     def _render_frr_ospf(self, router: Router) -> str:
         intents = get_ospf_interface_intents(router)
@@ -429,7 +442,11 @@ class Routing(Layer):
         for ((scope, type, name), obj) in reg.getAll().items():
             if type == 'rs':
                 rs_node: Node = obj
-                self._installBird(rs_node)
+                backend = get_bgp_backend(rs_node)
+                if backend == BGP_BACKEND_BIRD:
+                    self._installBird(rs_node)
+                else:
+                    self._installFrr(rs_node)
                 self._configure_rs(rs_node)
             if type == 'rnode':
                 rnode: Router = obj
@@ -496,7 +513,12 @@ class Routing(Layer):
                 assert issubclass(obj.__class__, Router), 'routing: render: adding new RS/Router after routing layer configured is not currently supported.'
 
             if type == 'rs':
-                self._render_bird_control_plane(obj)
+                rs_node: Router = obj
+                backend = get_bgp_backend(rs_node)
+                if backend == BGP_BACKEND_BIRD:
+                    self._render_bird_control_plane(rs_node)
+                else:
+                    self._render_frr_control_plane(rs_node)
 
             if type == 'rnode':
                 rnode: Router = obj

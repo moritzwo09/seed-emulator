@@ -1108,8 +1108,6 @@ ROUTER_CONTROL_PLANE_ROLE_RR_CLIENT = "rr-client"
 ROUTER_CONTROL_PLANE_ROLES = {
     ROUTER_CONTROL_PLANE_ROLE_EDGE,
     ROUTER_CONTROL_PLANE_ROLE_CORE,
-    ROUTER_CONTROL_PLANE_ROLE_RR,
-    ROUTER_CONTROL_PLANE_ROLE_RR_CLIENT,
 }
 
 fill_placeholder = """\
@@ -1171,9 +1169,11 @@ class Router(Node):
 
         This does not change legacy routing behavior by itself. Protocol layers
         such as Ibgp may use the role in opt-in modes to decide whether this
-        router should participate as an edge, core, RR, or RR client node.
+        router should participate as an edge or core node. Route-reflector
+        state is intentionally modeled separately with joinBgpCluster() and
+        makeRouteReflector(), so a router can be both edge/core and RR.
 
-        @param role edge, core, rr, or rr-client.
+        @param role edge or core.
 
         @returns self, for chaining API calls.
         """
@@ -1181,8 +1181,6 @@ class Router(Node):
         assert value in ROUTER_CONTROL_PLANE_ROLES, "unsupported control-plane role: {}".format(role)
         self.__control_plane_role = value
         self.setLabel("seedemu_control_plane_role", value)
-        if value == ROUTER_CONTROL_PLANE_ROLE_RR:
-            self.makeRouteReflector()
         return self
 
     def getControlPlaneRole(self) -> Optional[str]:

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .Base import Base
 from .Ospf import Ospf
 from .Ibgp import Ibgp
 from seedemu.core import Node, ScopedRegistry, Graphable, Emulator, Layer, Router
@@ -7,6 +8,9 @@ from typing import List, Tuple, Dict, Set
 from ._bgp_metadata import install_router_bgp_session
 
 MplsFileTemplates: Dict[str, str] = {}
+
+MPLS_PRESERVED_IBGP_MODES = {"edge-full-mesh", "route-reflector", "explicit"}
+MPLS_DISABLED_IBGP_MODES = {"disabled"}
 
 MplsFileTemplates['frr_start_script'] = """\
 #!/bin/bash
@@ -140,6 +144,26 @@ class Mpls(Layer, Graphable):
         """
         return self.__enabled
 
+    def __getExplicitIbgpMode(self, emulator: Emulator, asn: int):
+        reg = emulator.getRegistry()
+        if reg.has('seedemu', 'layer', 'Base'):
+            base: Base = reg.get('seedemu', 'layer', 'Base')
+            asobj = base.getAutonomousSystem(asn)
+            if hasattr(asobj, "hasIbgpMode") and asobj.hasIbgpMode():
+                return asobj.getIbgpMode()
+        if reg.has('seedemu', 'layer', 'Ibgp'):
+            ibgp: Ibgp = reg.get('seedemu', 'layer', 'Ibgp')
+            if hasattr(ibgp, "getConfiguredAsMode"):
+                return ibgp.getConfiguredAsMode(asn)
+        return None
+
+    def __preserveExistingIbgp(self, emulator: Emulator, asn: int) -> bool:
+        return self.__getExplicitIbgpMode(emulator, asn) in MPLS_PRESERVED_IBGP_MODES
+
+    def __installMplsIbgp(self, emulator: Emulator, asn: int) -> bool:
+        mode = self.__getExplicitIbgpMode(emulator, asn)
+        return mode not in MPLS_PRESERVED_IBGP_MODES and mode not in MPLS_DISABLED_IBGP_MODES
+
     def __maskExistingControlPlaneLayers(self, emulator: Emulator) -> None:
         """Mask OSPF/iBGP before those layers record non-MPLS intent."""
         reg = emulator.getRegistry()
@@ -149,7 +173,7 @@ class Mpls(Layer, Graphable):
                 ospf: Ospf = reg.get('seedemu', 'layer', 'Ospf')
                 ospf.maskAsn(asn)
 
-            if reg.has('seedemu', 'layer', 'Ibgp'):
+            if reg.has('seedemu', 'layer', 'Ibgp') and not self.__preserveExistingIbgp(emulator, asn):
                 self._log('Ibgp layer exists, masking as{}'.format(asn))
                 ibgp: Ibgp = reg.get('seedemu', 'layer', 'Ibgp')
                 ibgp.maskAsn(asn)
@@ -261,13 +285,18 @@ class Mpls(Layer, Graphable):
 
     def configure(self, emulator: Emulator):
         super().configure(emulator)
+        install_mpls_ibgp = {
+            asn: self.__installMplsIbgp(emulator, asn)
+            for asn in self.__enabled
+        }
         self.__maskExistingControlPlaneLayers(emulator)
         reg = emulator.getRegistry()
         for asn in self.__enabled:
             scope = ScopedRegistry(str(asn), reg)
             (enodes, _) = self.__getEdgeNodes(scope)
             enodes = self.__addAdditionalEdges(scope, asn, enodes)
-            self.__setUpIbgpMesh(enodes)
+            if install_mpls_ibgp[asn]:
+                self.__setUpIbgpMesh(enodes)
 
     def render(self, emulator: Emulator):
         reg = emulator.getRegistry()

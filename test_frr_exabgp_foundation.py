@@ -29,6 +29,27 @@ def test_router_backend_default_and_legacy_rejection():
         as2.createRouter("external", routingBackend="external")
 
 
+def test_as_level_control_plane_modes_are_explicit_intent():
+    as2 = Base().createAutonomousSystem(2)
+
+    assert as2.getIbgpMode() == "legacy-full-mesh"
+    assert not as2.hasIbgpMode()
+    assert as2.getOspfMode() == "legacy"
+    assert not as2.hasOspfMode()
+
+    as2.setIbgpMode("route-reflector")
+    as2.setOspfMode("router-transit-only")
+    assert as2.getIbgpMode() == "route-reflector"
+    assert as2.hasIbgpMode()
+    assert as2.getOspfMode() == "router-transit-only"
+    assert as2.hasOspfMode()
+
+    with pytest.raises(AssertionError, match="unsupported iBGP mode"):
+        as2.setIbgpMode("rr")
+    with pytest.raises(AssertionError, match="unsupported OSPF mode"):
+        as2.setOspfMode("host-facing")
+
+
 def test_frr_bgp_layer_shim_is_not_exported():
     with pytest.raises(ModuleNotFoundError):
         importlib.import_module("seedemu.layers.FrrBgp")
@@ -67,7 +88,7 @@ def test_route_server_peering_renders_from_intent_in_routing_layer():
     assert "bgp_large_community.add(PEER_COMM)" in router_conf
 
 
-def test_frr_route_server_backend_is_explicitly_rejected():
+def test_frr_route_server_backend_renders_route_server_client_config():
     emu = Emulator()
     base = Base()
     routing = Routing()
@@ -78,15 +99,31 @@ def test_frr_route_server_backend_is_explicitly_rejected():
     as150 = base.createAutonomousSystem(150)
     as150.createNetwork("net0")
     as150.createRouter("router0").joinNetwork("net0").joinNetwork("ix100")
+    as151 = base.createAutonomousSystem(151)
+    as151.createNetwork("net0")
+    as151.createRouter("router0").joinNetwork("net0").joinNetwork("ix100")
 
     ebgp.addRsPeer(100, 150)
+    ebgp.addRsPeer(100, 151)
 
     emu.addLayer(base)
     emu.addLayer(routing)
     emu.addLayer(ebgp)
+    emu.render()
 
-    with pytest.raises(NotImplementedError, match="FRR route-server nodes are not supported yet"):
-        emu.render()
+    route_server = emu.getRegistry().get("ix", "rs", "ix100")
+    as150_router = emu.getRegistry().get("150", "rnode", "router0")
+    frr_conf = _file_content(route_server, "/etc/frr/frr.conf")
+
+    assert _file_content(route_server, "/etc/bird/bird.conf") == ""
+    assert "router bgp 100" in frr_conf
+    assert " bgp router-id 10.100.0.100" in frr_conf
+    assert "neighbor 10.100.0.150 remote-as 150" in frr_conf
+    assert "neighbor 10.100.0.151 remote-as 151" in frr_conf
+    assert "neighbor 10.100.0.150 route-server-client" in frr_conf
+    assert "neighbor 10.100.0.151 route-server-client" in frr_conf
+    assert "redistribute connected" not in frr_conf
+    assert "protocol bgp p_rs100" in _file_content(as150_router, "/etc/bird/bird.conf")
 
 
 def test_frr_backend_renders_frr_config_for_selected_router():
@@ -142,7 +179,7 @@ def test_frr_backend_renders_frr_config_for_selected_router():
     assert "interface net0" in frr_conf
 
 
-def _build_three_router_ibgp_emulator(ibgp: Ibgp):
+def _build_three_router_ibgp_emulator(ibgp: Ibgp, configure_as=None):
     emu = Emulator()
     base = Base()
     routing = Routing()
@@ -154,6 +191,8 @@ def _build_three_router_ibgp_emulator(ibgp: Ibgp):
     as2.createRouter("edge_west").joinNetwork("west")
     as2.createRouter("core").joinNetwork("west").joinNetwork("east")
     as2.createRouter("edge_east", routingBackend="frr").joinNetwork("east")
+    if configure_as is not None:
+        configure_as(as2)
 
     emu.addLayer(base)
     emu.addLayer(routing)
@@ -178,10 +217,12 @@ def test_default_ibgp_mode_preserves_legacy_full_mesh():
 
 def test_edge_full_mesh_ibgp_mode_excludes_core_router():
     ibgp = Ibgp()
-    ibgp.setAsMode(2, "edge-full-mesh")
     ibgp.addParticipant(2, "edge_west")
     ibgp.addParticipant(2, "edge_east")
-    edge_west, core, edge_east = _build_three_router_ibgp_emulator(ibgp)
+    edge_west, core, edge_east = _build_three_router_ibgp_emulator(
+        ibgp,
+        configure_as=lambda as2: as2.setIbgpMode("edge-full-mesh"),
+    )
 
     west_sessions = [session for session in get_bgp_sessions(edge_west) if session["kind"] == "ibgp"]
     east_sessions = [session for session in get_bgp_sessions(edge_east) if session["kind"] == "ibgp"]
@@ -198,9 +239,9 @@ def test_router_control_plane_roles_drive_edge_full_mesh_mode():
     routing = Routing()
     ospf = Ospf()
     ibgp = Ibgp()
-    ibgp.setAsMode(2, "edge-full-mesh")
 
     as2 = base.createAutonomousSystem(2)
+    as2.setIbgpMode("edge-full-mesh")
     as2.createNetwork("west")
     as2.createNetwork("east")
     edge_west = as2.createRouter("edge_west").joinNetwork("west")
@@ -260,7 +301,7 @@ def test_router_control_plane_role_and_disable_validation():
     router = Base().createAutonomousSystem(2).createRouter("r1")
 
     with pytest.raises(AssertionError, match="unsupported control-plane role"):
-        router.setControlPlaneRole("access")
+        router.setControlPlaneRole("rr")
     with pytest.raises(AssertionError, match="unsupported router control-plane disable flag"):
         router.disableControlPlane("ospf")
 
@@ -286,9 +327,11 @@ def test_legacy_ibgp_exclude_router_removes_local_and_remote_sessions():
 
 def test_explicit_ibgp_mode_renders_only_declared_router_pair():
     ibgp = Ibgp()
-    ibgp.setAsMode(2, "explicit")
     ibgp.addSession(2, "edge_west", "edge_east")
-    edge_west, core, edge_east = _build_three_router_ibgp_emulator(ibgp)
+    edge_west, core, edge_east = _build_three_router_ibgp_emulator(
+        ibgp,
+        configure_as=lambda as2: as2.setIbgpMode("explicit"),
+    )
 
     west_sessions = [session for session in get_bgp_sessions(edge_west) if session["kind"] == "ibgp"]
     east_sessions = [session for session in get_bgp_sessions(edge_east) if session["kind"] == "ibgp"]
@@ -301,14 +344,26 @@ def test_explicit_ibgp_mode_renders_only_declared_router_pair():
 
 def test_disabled_ibgp_mode_matches_as_masking_semantics():
     ibgp = Ibgp()
-    ibgp.setAsMode(2, "disabled")
-    edge_west, core, edge_east = _build_three_router_ibgp_emulator(ibgp)
+    edge_west, core, edge_east = _build_three_router_ibgp_emulator(
+        ibgp,
+        configure_as=lambda as2: as2.setIbgpMode("disabled"),
+    )
 
     assert get_bgp_sessions(edge_west) == []
     assert get_bgp_sessions(core) == []
     assert get_bgp_sessions(edge_east) == []
-    assert ibgp.getAsMode(2) == "disabled"
-    assert 2 in ibgp.getMaskedAsns()
+
+
+def test_legacy_ibgp_set_as_mode_shim_still_works():
+    ibgp = Ibgp()
+    ibgp.setAsMode(2, "edge-full-mesh")
+    ibgp.addParticipant(2, "edge_west")
+    ibgp.addParticipant(2, "edge_east")
+    edge_west, core, edge_east = _build_three_router_ibgp_emulator(ibgp)
+
+    assert len([session for session in get_bgp_sessions(edge_west) if session["kind"] == "ibgp"]) == 1
+    assert [session for session in get_bgp_sessions(core) if session["kind"] == "ibgp"] == []
+    assert len([session for session in get_bgp_sessions(edge_east) if session["kind"] == "ibgp"]) == 1
 
 
 def test_route_reflector_mode_uses_explicit_cluster_members_only():
@@ -317,9 +372,9 @@ def test_route_reflector_mode_uses_explicit_cluster_members_only():
     routing = Routing()
     ospf = Ospf()
     ibgp = Ibgp()
-    ibgp.setAsMode(2, "route-reflector")
 
     as2 = base.createAutonomousSystem(2)
+    as2.setIbgpMode("route-reflector")
     as2.createNetwork("net0")
     as2.createBgpCluster("10.2.0.1")
     as2.createRouter("rr").joinNetwork("net0").joinBgpCluster("10.2.0.1").makeRouteReflector()
@@ -339,6 +394,33 @@ def test_route_reflector_mode_uses_explicit_cluster_members_only():
     assert len([session for session in get_bgp_sessions(rr) if session["route_reflector_client"]]) == 1
     assert len([session for session in get_bgp_sessions(client) if session["kind"] == "ibgp"]) == 1
     assert [session for session in get_bgp_sessions(core) if session["kind"] == "ibgp"] == []
+
+
+def test_edge_router_can_also_be_route_reflector():
+    emu = Emulator()
+    base = Base()
+    routing = Routing()
+    ospf = Ospf()
+    ibgp = Ibgp()
+
+    as2 = base.createAutonomousSystem(2)
+    as2.setIbgpMode("route-reflector")
+    as2.createNetwork("net0")
+    as2.createBgpCluster("10.2.0.1")
+    rr = as2.createRouter("edge_rr").joinNetwork("net0").joinBgpCluster("10.2.0.1")
+    rr.setControlPlaneRole("edge").makeRouteReflector()
+    as2.createRouter("client").joinNetwork("net0").joinBgpCluster("10.2.0.1")
+
+    emu.addLayer(base)
+    emu.addLayer(routing)
+    emu.addLayer(ospf)
+    emu.addLayer(ibgp)
+    emu.render()
+
+    edge_rr = emu.getRegistry().get("2", "rnode", "edge_rr")
+    assert edge_rr.getControlPlaneRole() == "edge"
+    assert edge_rr.isRouteReflector()
+    assert len([session for session in get_bgp_sessions(edge_rr) if session["route_reflector_client"]]) == 1
 
 
 def test_ospf_legacy_mode_keeps_local_networks_active_by_default():
@@ -370,14 +452,16 @@ def test_ospf_router_transit_only_mode_keeps_host_network_passive():
     base = Base()
     routing = Routing()
     ospf = Ospf()
-    ospf.setAsMode(2, "router-transit-only")
 
     as2 = base.createAutonomousSystem(2)
+    as2.setOspfMode("router-transit-only")
     as2.createNetwork("transit")
     as2.createNetwork("hostnet")
+    as2.createNetwork("hostnet2")
     as2.createRouter("r1").joinNetwork("transit").joinNetwork("hostnet")
-    as2.createRouter("r2").joinNetwork("transit")
+    as2.createRouter("r2", routingBackend="frr").joinNetwork("transit").joinNetwork("hostnet2")
     as2.createHost("host").joinNetwork("hostnet")
+    as2.createHost("host2").joinNetwork("hostnet2")
 
     emu.addLayer(base)
     emu.addLayer(routing)
@@ -390,17 +474,24 @@ def test_ospf_router_transit_only_mode_keeps_host_network_passive():
     assert "hostnet" in intents["passive"]
     assert "hostnet" not in intents["active"]
 
+    bird_conf = _file_content(r1, "/etc/bird/bird.conf")
+    frr_conf = _file_content(emu.getRegistry().get("2", "rnode", "r2"), "/etc/frr/frr.conf")
+    assert 'interface "transit" { hello 1; dead count 2; }' in bird_conf
+    assert 'interface "hostnet" { stub; }' in bird_conf
+    assert "interface transit\n ip ospf area 0" in frr_conf
+    assert "interface hostnet2\n ip ospf area 0\n ip ospf passive" in frr_conf
+
 
 def test_ospf_router_transit_only_respects_explicit_stub_and_mask():
     emu = Emulator()
     base = Base()
     routing = Routing()
     ospf = Ospf()
-    ospf.setAsMode(2, "router-transit-only")
     ospf.markAsStub(2, "stubbed")
     ospf.maskNetwork(2, "masked")
 
     as2 = base.createAutonomousSystem(2)
+    as2.setOspfMode("router-transit-only")
     as2.createNetwork("transit")
     as2.createNetwork("stubbed")
     as2.createNetwork("masked")
@@ -686,6 +777,57 @@ def test_mpls_masks_ospf_and_ibgp_before_intent_is_recorded():
     assert "protocol bgp mpls_ibgp1" in r1_conf
     assert "igp table master4" in r1_conf
     assert "protocol bgp mpls_ibgp1" in r4_conf
+
+
+def test_mpls_preserves_explicit_route_reflector_ibgp_mode():
+    emu = Emulator()
+    base = Base()
+    routing = Routing()
+    ibgp = Ibgp()
+    ospf = Ospf()
+    mpls = Mpls()
+
+    base.createInternetExchange(100)
+    base.createInternetExchange(101)
+
+    as2 = base.createAutonomousSystem(2)
+    as2.setIbgpMode("route-reflector")
+    as2.createNetwork("net0")
+    as2.createNetwork("net1")
+    as2.createBgpCluster("10.2.0.1")
+    as2.createRouter("r1").joinNetwork("ix100").joinNetwork("net0").joinBgpCluster("10.2.0.1").makeRouteReflector()
+    as2.createRouter("r2").joinNetwork("net0").joinNetwork("net1")
+    as2.createRouter("r4").joinNetwork("net1").joinNetwork("ix101").joinBgpCluster("10.2.0.1")
+    mpls.enableOn(2)
+
+    emu.addLayer(base)
+    emu.addLayer(routing)
+    emu.addLayer(ibgp)
+    emu.addLayer(ospf)
+    emu.addLayer(mpls)
+    emu.render()
+
+    r1 = emu.getRegistry().get("2", "rnode", "r1")
+    r2 = emu.getRegistry().get("2", "rnode", "r2")
+    r4 = emu.getRegistry().get("2", "rnode", "r4")
+
+    r1_ibgp = [session for session in get_bgp_sessions(r1) if session["kind"] == "ibgp"]
+    r4_ibgp = [session for session in get_bgp_sessions(r4) if session["kind"] == "ibgp"]
+    assert len(r1_ibgp) == 1
+    assert r1_ibgp[0]["route_reflector_client"]
+    assert r1_ibgp[0]["igp_table"] == "master4"
+    assert len(r4_ibgp) == 1
+    assert r4_ibgp[0]["name"] == "Ibgp_rr_r1"
+    assert get_bgp_sessions(r2) == []
+
+    r1_conf = _file_content(r1, "/etc/bird/bird.conf")
+    r2_conf = _file_content(r2, "/etc/bird/bird.conf")
+    r2_frr = _file_content(r2, "/etc/frr/frr.conf")
+    assert "protocol bgp Ibgp_rr_client_r4" in r1_conf
+    assert "igp table master4" in r1_conf
+    assert "protocol bgp mpls_ibgp" not in r1_conf
+    assert "protocol bgp" not in r2_conf
+    assert "mpls ldp" in r2_frr
 
 
 def test_exabgp_service_renders_speaker_and_router_peer():

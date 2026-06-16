@@ -2,6 +2,7 @@ from __future__ import annotations
 from seedemu.core import Node, Emulator, Layer
 from seedemu.core.enums import NetworkType, NodeRole
 from typing import Set, Dict, List, Tuple
+from .Base import Base
 from ._bgp_metadata import classify_ospf_interfaces, set_ospf_interface_intents
 
 OspfFileTemplates: Dict[str, str] = {}
@@ -65,6 +66,14 @@ class Ospf(Layer):
         @brief Get OSPF interface classification mode for an AS.
         """
         return self.__as_modes.get(int(asn), OSPF_MODE_LEGACY)
+
+    def getConfiguredAsMode(self, asn: int):
+        """!
+        @brief Get the compatibility-layer OSPF mode explicitly set here.
+
+        New code should prefer AutonomousSystem.setOspfMode(...).
+        """
+        return self.__as_modes.get(int(asn))
 
     def markAsStub(self, asn: int, netname: str) -> Ospf:
         """!
@@ -195,6 +204,7 @@ class Ospf(Layer):
 
     def configure(self, emulator: Emulator):
         reg = emulator.getRegistry()
+        base: Base = reg.get('seedemu', 'layer', 'Base')
 
         for ((scope, type, name), obj) in reg.getAll().items():
             if type != 'rnode': continue
@@ -202,9 +212,12 @@ class Ospf(Layer):
             if router.getAsn() in self.__masked_asn: continue
 
             self._log('setting up OSPF for router as{}/{}...'.format(scope, name))
+            asobj = base.getAutonomousSystem(int(scope))
+            if int(scope) in self.__as_modes:
+                asobj.setOspfMode(self.__as_modes[int(scope)])
             stub_networks = [net for (asn, net) in self.__stubs if asn == int(scope)]
             masked_networks = [net for (asn, net) in self.__masked if asn == int(scope)]
-            if self.getAsMode(int(scope)) == OSPF_MODE_ROUTER_TRANSIT_ONLY:
+            if asobj.getOspfMode() == OSPF_MODE_ROUTER_TRANSIT_ONLY:
                 active, stubs = self.__classify_router_transit_interfaces(
                     router,
                     stubs=stub_networks,

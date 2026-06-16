@@ -11,10 +11,28 @@ from .Configurable import Configurable
 from .Customizable import Customizable
 from .Node import promote_to_real_world_router
 from ipaddress import IPv4Network
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 import requests
 
 RIS_PREFIXLIST_URL = 'https://stat.ripe.net/data/announced-prefixes/data.json'
+
+IBGP_MODE_LEGACY_FULL_MESH = "legacy-full-mesh"
+IBGP_MODE_EDGE_FULL_MESH = "edge-full-mesh"
+IBGP_MODE_ROUTE_REFLECTOR = "route-reflector"
+IBGP_MODE_EXPLICIT = "explicit"
+IBGP_MODE_DISABLED = "disabled"
+
+IBGP_MODES = {
+    IBGP_MODE_LEGACY_FULL_MESH,
+    IBGP_MODE_EDGE_FULL_MESH,
+    IBGP_MODE_ROUTE_REFLECTOR,
+    IBGP_MODE_EXPLICIT,
+    IBGP_MODE_DISABLED,
+}
+
+OSPF_MODE_LEGACY = "legacy"
+OSPF_MODE_ROUTER_TRANSIT_ONLY = "router-transit-only"
+OSPF_MODES = {OSPF_MODE_LEGACY, OSPF_MODE_ROUTER_TRANSIT_ONLY}
 
 class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
     """!
@@ -30,6 +48,8 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
     __nets: Dict[str, Network]
     __name_servers: List[str]
     __clusters: Dict[str, Tuple[Set[str], Set[str]]]
+    __ibgp_mode: Optional[str]
+    __ospf_mode: Optional[str]
 
     def __init__(self, asn: int, subnetTemplate: str = "10.{}.0.0/16"):
         """!
@@ -46,6 +66,65 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
         self.__subnets = None if asn > 255 else list(IPv4Network(subnetTemplate.format(asn)).subnets(new_prefix = 24))
         self.__name_servers = []
         self.__clusters = {}
+        self.__ibgp_mode = None
+        self.__ospf_mode = None
+
+    def setIbgpMode(self, mode: str) -> AutonomousSystem:
+        """!
+        @brief Set the AS-level iBGP route propagation mode.
+
+        The default is legacy-full-mesh when unset. This setting records AS
+        intent; the Ibgp layer still renders concrete BGP sessions.
+
+        @param mode legacy-full-mesh, edge-full-mesh, route-reflector,
+        explicit, or disabled.
+
+        @returns self, for chaining API calls.
+        """
+        value = str(mode or IBGP_MODE_LEGACY_FULL_MESH).strip().lower()
+        assert value in IBGP_MODES, "unsupported iBGP mode: {}".format(mode)
+        self.__ibgp_mode = value
+        return self
+
+    def getIbgpMode(self) -> str:
+        """!
+        @brief Get the AS-level iBGP route propagation mode.
+        """
+        return self.__ibgp_mode or IBGP_MODE_LEGACY_FULL_MESH
+
+    def hasIbgpMode(self) -> bool:
+        """!
+        @brief Return whether an iBGP mode was explicitly set on this AS.
+        """
+        return self.__ibgp_mode is not None
+
+    def setOspfMode(self, mode: str) -> AutonomousSystem:
+        """!
+        @brief Set the AS-level OSPF interface classification mode.
+
+        The default is legacy when unset. Ospf records interface intent and
+        Routing renders backend-specific BIRD/FRR configuration.
+
+        @param mode legacy or router-transit-only.
+
+        @returns self, for chaining API calls.
+        """
+        value = str(mode or OSPF_MODE_LEGACY).strip().lower()
+        assert value in OSPF_MODES, "unsupported OSPF mode: {}".format(mode)
+        self.__ospf_mode = value
+        return self
+
+    def getOspfMode(self) -> str:
+        """!
+        @brief Get the AS-level OSPF interface classification mode.
+        """
+        return self.__ospf_mode or OSPF_MODE_LEGACY
+
+    def hasOspfMode(self) -> bool:
+        """!
+        @brief Return whether an OSPF mode was explicitly set on this AS.
+        """
+        return self.__ospf_mode is not None
 
     def createBgpCluster(self, address: str) -> AutonomousSystem:
         """!
