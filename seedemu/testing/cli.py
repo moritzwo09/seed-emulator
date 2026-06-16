@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import sys
 from typing import Optional, Sequence
@@ -29,6 +30,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    os.environ["TEST_RUNNER_COMMAND"] = args.command
     runner = create_runner(args.manifest, artifact_dir=args.artifact_dir, runner=args.runner)
     return getattr(runner, args.command)()
 
