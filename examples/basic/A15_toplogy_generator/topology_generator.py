@@ -30,6 +30,8 @@ DEFAULT_ROUTER_LOCATIONS = {
     "r0": {"lat": 40.7128, "lon": -74.0060, "label": "New York"},
     "r1": {"lat": 41.8781, "lon": -87.6298, "label": "Chicago"},
     "r2": {"lat": 34.0522, "lon": -118.2437, "label": "Los Angeles"},
+    "r3": {"lat": 39.9042, "lon": 116.4074,  "label": "Beijing"},
+    "r4": {"lat": 51.5072, "lon": 0.1276,    "label": "London"},
 }
 
 
