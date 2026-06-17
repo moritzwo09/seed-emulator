@@ -233,7 +233,7 @@ def masterNode(nodes: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def configValues(data: dict[str, Any], nodes: list[dict[str, Any]]) -> dict[str, Any]:
-    """Build the local shell variable values consumed by applyK3sCluster.sh."""
+    """Build the local shell variable values consumed by applyK3sCluster.py."""
     cluster_name = str(data.get("clusterName") or data.get("cluster_name") or "seedemu-k3s")
     master = masterNode(nodes)
     registry_host = getNested(data, "registry.host", master["ip"])
@@ -285,7 +285,7 @@ def fabricValues(data: dict[str, Any]) -> dict[str, Any]:
 
     The first implementation intentionally supports a two-node Linux VXLAN
     fabric. Larger physical fabrics should use a real L2/VLAN/EVPN/OVS design
-    instead of an implicit shell-script full mesh.
+    instead of an implicit command-driven full mesh.
     """
     values = {
         "fabricType": str(getNested(data, "fabric.type", "none")),
@@ -309,7 +309,7 @@ def ovnValues(data: dict[str, Any], nodes: list[dict[str, Any]]) -> dict[str, An
         data: Parsed configK3s.yaml mapping.
         nodes: Normalized node list used to discover the master IP.
 
-    These values are consumed by ovn/installKubeOvnFabric.sh. Kube-OVN runs as
+    These values are consumed by ovn/installKubeOvnFabric.py. Kube-OVN runs as
     a secondary CNI while K3s/flannel remains the primary eth0 network.
     """
     vals = configValues(data, nodes)
@@ -432,7 +432,7 @@ def fabricNodeRows(data: dict[str, Any], nodes: list[dict[str, Any]]) -> list[di
     The user may set fabric.nodes.<node>.underlayInterface explicitly. If it is
     omitted, the helper detects the underlay by asking the node which interface
     it uses to route to the peer management IP. Test IPs are internal defaults
-    and are only used by validateLinuxVxlanFabric.sh.
+    and are only used by validateLinuxVxlanFabric.py.
     """
     values = fabricValues(data)
     if values["fabricType"] == "none":
@@ -582,7 +582,7 @@ def ansibleHostVars(node: dict[str, Any], k3s_role: str, as_group: str) -> dict[
 
 
 def commandWriteAnsibleInventory(args: argparse.Namespace) -> None:
-    """Write the temporary Ansible inventory used by applyK3sCluster.sh."""
+    """Write the temporary Ansible inventory used by applyK3sCluster.py."""
     data = loadYaml(args.config)
     nodes = yamlNodes(data)
     vals = configValues(data, nodes)

@@ -1,149 +1,114 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
-from seedemu import *
-import sys, os
-import math, json
-from eth_account import Account
+from __future__ import annotations
 
-###############################################################################
-# Set the platform information
-script_name = os.path.basename(__file__)
-
-if len(sys.argv) < 2:
-    print(f"Usage:  {script_name} <total_number_of_eth_nodes> [amd|arm]")
-    sys.exit(1)
-
-# Read total number of Ethereum beaconnodes from the command line argument
-try:
-    total_number_of_beaconnodes = int(sys.argv[1])
-except ValueError:
-    print(f"Invalid number of Ethereum beaconnodes: {sys.argv[1]}")
-    sys.exit(1)
-
-# Optional platform argument
-if len(sys.argv) == 3:
-    if sys.argv[2].lower() == 'amd':
-        platform = Platform.AMD64
-    elif sys.argv[2].lower() == 'arm':
-        platform = Platform.ARM64
-    else:
-        print(f"Usage:  {script_name} <total_number_of_eth_beaconnodes> amd|arm")
-        sys.exit(1)
-else:
-    platform = Platform.AMD64  # Default platform is AMD64
-
-geth_node_number = total_number_of_beaconnodes
-beacon_node_number = total_number_of_beaconnodes
-vc_node_number = 3 * total_number_of_beaconnodes
-beaconsetup_node_number = 1
-
-total_number_of_nodes = geth_node_number + beacon_node_number + vc_node_number + beaconsetup_node_number
-
-# Calculate how many hosts per stub AS are needed
-# We know we have 10 stub AS (150-154, 160-164), and at least one node per AS is required
-# to host a node (Beacon or Ethereum node).
-total_stub_as = 10  # We have 10 ASNs available
-hosts_per_stub_as = math.ceil(total_number_of_nodes / total_stub_as)
-
-# Create Emulator Base with the calculated number of hosts per stub AS
-emu = Makers.makeEmulatorBaseWith10StubASAndHosts(hosts_per_stub_as=hosts_per_stub_as)
-
-print(f"Number of eth nodes per stub AS: {hosts_per_stub_as}")
-
-# Create the Ethereum layer
-eth = EthereumService()
-###  ethserevice -> blockchain -> ethserver (gethserver/beaconserver/beaconsetup)
-# Create the Blockchain layer which is a sub-layer of Ethereum layer. 说明是pos子类
-blockchain = eth.createBlockchain(chainName="pos", consensus=ConsensusMechanism.POS)
-
-# Generate a list of accounts and prefund them
-accounts_total = 1000
-pre_funded_amount = 1000000
-mnemonic = "gentle always fun glass foster produce north tail security list example gain"
-Account.enable_unaudited_hdwallet_features()
-for i in range(accounts_total):
-    account = Account.from_mnemonic(mnemonic, account_path=f"m/44'/60'/0'/0/{i}")
-    blockchain.addLocalAccount(address=account.address, balance=pre_funded_amount)
-
-asns = [150, 151, 152, 153, 154, 160, 161, 162, 163, 164]
-
-###################################################
+import argparse
+from pathlib import Path
+import sys
 
 
-geth_nodes: List[PoSGethServer] = []
-beacon_nodes: List[PoSBeaconServer] = []
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-vc_nodes: List[PoSVcServer] = []
+from seedemu import Platform
+from examples.blockchain.D01_ethereum_pos import ethereum_pos as d01_ethereum_pos
 
-### create beaconsetupnode
-beaconsetupServer: PoSBeaconSetupServer = blockchain.createBeaconSetupNode(f"BeaconSetupNode")
-emu.getVirtualNode(f'BeaconSetupNode').setDisplayName('Ethereum-BeaconSetup')
-### create gethnode
-for i in range(geth_node_number):
-    gethServer: PoSGethServer = blockchain.createGethNode(f"gethnode{i}")
-    gethServer.enableGethHttp()
-    gethServer.appendClassName(f'Ethereum-POS-Geth-{i + 1}')
-    geth_nodes.append(gethServer)
-    emu.getVirtualNode(f'gethnode{i}').setDisplayName(f'Ethereum-POS-Geth-{i + 1}')
-## create beaconnode
-for i in range(beacon_node_number):
-    beaconServer: PoSBeaconServer = blockchain.createBeaconNode(f"beaconnode{i}")
-    beaconServer.appendClassName(f'Ethereum-POS-Beacon-{i + 1}')
-    beaconServer.connectToGethNode(f"gethnode{(i + 1) % len(geth_nodes)}")
-    beacon_nodes.append(beaconServer)
-    emu.getVirtualNode(f'beaconnode{i}').setDisplayName(f'Ethereum-POS-Beacon-{i + 1}')
-    # beaconServer.enablePOSValidatorAtGenesis()
-# set bootnode
-geth_nodes[0].setBootNode(True)
-beacon_nodes[0].setBootNode(True)
 
-for i in range(vc_node_number):
-    VcServer: PoSVcServer = blockchain.createVcNode(f"vcnode{i}")
-    VcServer.appendClassName(f'Ethereum-POS-Validator-{i + 1}')
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Build the D10 Ethereum PoS EthExplorer example.")
+    parser.add_argument(
+        "legacy_args",
+        nargs="*",
+        help="legacy form: <beacon_node_count> [amd|arm]",
+    )
+    parser.add_argument("--platform", choices=["amd", "arm"])
+    parser.add_argument("--output", default=str(SCRIPT_DIR / "output"))
+    parser.add_argument("--dumpfile")
+    parser.add_argument(
+        "--beacon-nodes",
+        type=int,
+        default=3,
+        help="number of geth/beacon node pairs",
+    )
+    parser.add_argument(
+        "--validators-per-beacon",
+        type=int,
+        default=3,
+        help="validator clients per beacon node",
+    )
+    parser.add_argument("--override", dest="override", action="store_true", default=True)
+    parser.add_argument("--no-override", dest="override", action="store_false")
+    parser.add_argument("--skip-render", dest="render", action="store_false", default=True)
+    args = parser.parse_args()
 
-    VcServer.connectToBeaconNode(f"beaconnode{(i + 1) % len(beacon_nodes)}")
-    VcServer.enablePOSValidatorAtGenesis()
-    vc_nodes.append(VcServer)
-    emu.getVirtualNode(f'vcnode{i}').setDisplayName(f'Ethereum-POS-Validator-{i + 1}')
+    if len(args.legacy_args) > 2:
+        parser.error("legacy arguments must be: <beacon_node_count> [amd|arm]")
 
-assign_index = 0
-total_nodes = len(geth_nodes) + len(beacon_nodes) + len(vc_nodes)
-for asn in asns:
-    for id in range(hosts_per_stub_as):
-        if asn == 152 and id == 0:
-            emu.addBinding(Binding('BeaconSetupNode',
-                                   filter=Filter(asn=asn, nodeName=f'^host_{id}$'),
-                                   action=Action.FIRST))
+    legacy_platform = None
+    if args.legacy_args:
+        first = args.legacy_args[0].lower()
+        if first in ("amd", "arm"):
+            legacy_platform = first
         else:
-            if assign_index >= total_nodes:
-                continue
-            if assign_index < len(geth_nodes):
-                name = f'gethnode{assign_index}'
-            elif assign_index < len(geth_nodes) + len(beacon_nodes):
-                name = f'beaconnode{assign_index - len(geth_nodes)}'
-            else:
-                name = f'vcnode{assign_index - len(geth_nodes) - len(beacon_nodes)}'
-            emu.addBinding(Binding(name,
-                                   filter=Filter(asn=asn, nodeName=f'^host_{id}$'),
-                                   action=Action.FIRST))
-            assign_index += 1
+            try:
+                args.beacon_nodes = int(first)
+            except ValueError:
+                parser.error("legacy beacon node count must be an integer")
 
-# Add Ethereum layer to the emulator
-emu.addLayer(eth)
-base_layer = emu.getLayer('Base')
-for asn in asns:
-    as_obj = base_layer.getAutonomousSystem(asn)
-    net = as_obj.getNetwork('net0')
-    # Extend host IP range from 71-99 to 71-199 (supports 129 hosts, enough for 50 per AS)
-    # Router range is 200-254, so host must end at 199 to avoid conflict
-    # Move DHCP range to 51-70 to avoid conflict with extended host range (71-199)
-    net.setHostIpRange(hostStart=71, hostEnd=199, hostStep=1)
+    if len(args.legacy_args) == 2:
+        legacy_platform = args.legacy_args[1].lower()
+        if legacy_platform not in ("amd", "arm"):
+            parser.error("legacy platform must be amd or arm")
 
-emu.render()
+    args.platform = args.platform or legacy_platform or "amd"
+    if args.beacon_nodes < 1:
+        parser.error("--beacon-nodes must be >= 1")
+    if args.validators_per_beacon < 1:
+        parser.error("--validators-per-beacon must be >= 1")
+    return args
 
-# Enable internetMap and etherView for visualization
-docker = Docker(internetMapEnabled=True, etherViewEnabled=True, platform=platform)
 
-# Compile the emulator to output
-emu.compile(docker, './output', override=True)
+def resolve_platform(name: str) -> Platform:
+    return Platform.AMD64 if name == "amd" else Platform.ARM64
+
+
+def run(
+    dumpfile=None,
+    total_beacon_nodes: int = 3,
+    vc_per_beacon: int = 3,
+    output=None,
+    platform=Platform.AMD64,
+    override: bool = True,
+    render: bool = True,
+):
+    d01_ethereum_pos.run(
+        dumpfile=dumpfile,
+        total_beacon_nodes=total_beacon_nodes,
+        vc_per_beacon=vc_per_beacon,
+        output=output,
+        platform=platform,
+        override=override,
+        render=render,
+        ether_view_enabled=True,
+    )
+
+
+def main() -> int:
+    args = parse_args()
+    run(
+        dumpfile=args.dumpfile,
+        total_beacon_nodes=args.beacon_nodes,
+        vc_per_beacon=args.validators_per_beacon,
+        output=str(Path(args.output).resolve()),
+        platform=resolve_platform(args.platform),
+        override=args.override,
+        render=args.render,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

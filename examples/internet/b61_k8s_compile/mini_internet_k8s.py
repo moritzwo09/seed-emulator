@@ -6,6 +6,7 @@ Outputs are written to ./output by default:
   NetworkAttachmentDefinitions, Deployments.
 - images.yaml: image build contexts consumed by the generated running/ stage.
 - per-node Docker build contexts and optional base_images/ contexts.
+Default CNI is kube-ovn. Use --cni-type macvlan for macvlan manifests.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ from seedemu.layers import Base, Routing, Ebgp, Ibgp, Ospf, PeerRelationship
 from seedemu.utilities import Makers
 from seedemu.compiler import Platform
 
-from seedemu.compiler import NativeKubernetesCompiler
+from seedemu.compiler import KubernetesCompiler
 
 
 HOSTS_PER_AS = 2
@@ -55,6 +56,12 @@ def parse_args() -> argparse.Namespace:
         choices=("amd64", "arm64"),
         default="amd64",
         help="Target platform for Docker build contexts.",
+    )
+    parser.add_argument(
+        "--cni-type",
+        choices=("kube-ovn", "ovn", "macvlan"),
+        default="kube-ovn",
+        help="Secondary CNI backend for SeedEMU links. Defaults to kube-ovn.",
     )
     return parser.parse_args()
 
@@ -127,7 +134,7 @@ def main() -> int:
         output_dir = (SCRIPT_DIR / output_dir).resolve()
     platform = Platform.AMD64 if args.platform == "amd64" else Platform.ARM64
 
-    compiler = NativeKubernetesCompiler(platform=platform)
+    compiler = KubernetesCompiler(platform=platform, cni_type=args.cni_type)
 
     emu = build_mini_internet(hosts_per_as=HOSTS_PER_AS)
     emu.compile(compiler, str(output_dir), override=True)
@@ -138,7 +145,8 @@ def main() -> int:
     print("Config file: not used")
     print(f"Output directory: {output_dir}")
     print("Image registry prefix: seedemu")
-    print("Namespace: seedemu-k8s-b61")
+    print("Namespace: seedemu")
+    print(f"CNI type: {args.cni_type}")
     print("Runtime workflow: seedemu.k8sTools")
     print("Inventory required for compile: no")
     return 0

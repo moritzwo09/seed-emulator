@@ -18,7 +18,7 @@ from string import ascii_letters
 from random import choice
 from .BaseSystem import BaseSystem
 
-DEFAULT_SOFTWARE: List[str] = ['zsh', 'curl', 'nano', 'vim-nox', 'mtr-tiny', 'iproute2', 'iputils-ping', 'tcpdump', 'termshark', 'dnsutils', 'jq', 'ipcalc', 'netcat']
+DEFAULT_SOFTWARE: List[str] = ['zsh', 'curl', 'nano', 'vim-nox', 'mtr-tiny', 'iproute2', 'iputils-ping', 'tcpdump', 'termshark', 'dnsutils', 'jq', 'ipcalc', 'netcat-openbsd']
 
 class File(Printable):
     """!
@@ -1134,14 +1134,58 @@ class Router(Node):
 
     __loopback_address: str
     __is_border_router: bool
-
+    __is_bgp_rr: bool
+    __bgp_cluster_id: Optional[str]
+    __routing_backend: str
     __extensions: Dict[str, RouterExtension]
 
-    def __init__(self, name: str, role: NodeRole, asn: int, scope: str = None):
+    def __init__(self, name: str, role: NodeRole, asn: int, scope: str = None, routingBackend: str = "bird"):
         self.__is_border_router = False
         self.__loopback_address = None
+        self.__is_bgp_rr = False
+        self.__bgp_cluster_id = None
+        self.__routing_backend = "bird"
         self.__extensions = {}
         super().__init__( name,role,asn,scope)
+        self.setRoutingBackend(routingBackend)
+
+    def makeRouteReflector(self, is_rr: bool = True) -> Router:
+        """!
+        @brief Mark this router as an iBGP Route Reflector.
+
+        @param is_rr whether this router should act as a Route Reflector.
+
+        @returns self, for chaining API calls.
+        """
+        self.__is_bgp_rr = is_rr
+        return self
+
+    def joinBgpCluster(self, cluster_id: str) -> Router:
+        """!
+        @brief Assign this router to an iBGP Route Reflector cluster.
+
+        @param cluster_id cluster ID previously registered on the AS.
+
+        @returns self, for chaining API calls.
+        """
+        self.__bgp_cluster_id = cluster_id
+        return self
+
+    def getBgpClusterId(self) -> Optional[str]:
+        """!
+        @brief Get the configured Route Reflector cluster ID.
+
+        @returns cluster ID, or None if the router uses the default cluster.
+        """
+        return self.__bgp_cluster_id
+
+    def isRouteReflector(self) -> bool:
+        """!
+        @brief Check whether this router is configured as a Route Reflector.
+
+        @returns True if the router acts as an iBGP Route Reflector.
+        """
+        return self.__is_bgp_rr
 
     def hasExtension(self, name: str) -> bool:
         return name in self.__extensions
@@ -1169,6 +1213,30 @@ class Router(Node):
 
     def isBorderRouter(self):
         return self.__is_border_router
+
+    def setRoutingBackend(self, backend: str) -> Router:
+        """!
+        @brief Set the full routing daemon backend for this router.
+
+        @param backend routing backend. Supported values are bird and frr.
+        ExaBGP is installed as a service speaker, not as a router backend.
+
+        @returns self, for chaining API calls.
+        """
+        value = str(backend or "bird").strip().lower() or "bird"
+        assert value in {"bird", "frr"}, "unsupported routing backend: {}".format(backend)
+        self.__routing_backend = value
+        self.setLabel("seedemu_routing_backend", value)
+        self.setLabel("seedemu_bgp_backend", value)
+        return self
+
+    def getRoutingBackend(self) -> str:
+        """!
+        @brief Get the full routing daemon backend for this router.
+
+        @returns backend name.
+        """
+        return self.__routing_backend
 
     def setLoopbackAddress(self, address: str):
         """!
@@ -1472,4 +1540,3 @@ def promote_to_scion_router(node: Node):
         extn.initScionRouter()
         node.installExtension(extn)
     return node
-
