@@ -30,8 +30,9 @@ retry_rpc_method() {
 
   local resp
   local value
-
-  for i in {1..6}; do
+  local i=0
+  while true; do
+    i=$((i + 1))
     echo "[$method] Attempt $i..." >&2
 
     resp=$(curl -sS --fail -X POST "$rpc_url" \
@@ -55,10 +56,8 @@ retry_rpc_method() {
     echo "[$method] Failed response:" >&2
     echo "$resp" >&2
 
-    if [ "$i" -lt 6 ]; then
-      echo "[$method] Retrying in 10s..." >&2
-      sleep 10
-    fi
+    echo "[$method] Retrying in 30s..." >&2
+    sleep 30
   done
 
   echo "[$method] Failed after retries" >&2
@@ -71,8 +70,10 @@ retry_rpc_method() {
 
 URL="http://${CL_HOST}:${CL_PORT}/eth/v1/beacon/genesis"
 
-for i in {1..6}; do
-  echo "[Genesis] Attempt $i..."
+count=0
+while true; do
+  count=$((count + 1))
+  echo "[Genesis] Attempt $count..."
 
   RESP=$(curl -sS --fail "$URL" 2>/dev/null)
 
@@ -89,10 +90,8 @@ for i in {1..6}; do
   echo "[Genesis] Failed response:"
   echo "$RESP"
 
-  if [ "$i" -lt 6 ]; then
-    echo "[Genesis] Retrying in 10s..."
-    sleep 10
-  fi
+  echo "[Genesis] Retrying in 30s..."
+  sleep 30
 done
 
 if [ -z "$GENESIS_TIMESTAMP" ] || [ -z "$GENESIS_VALIDATORSROOT" ]; then
