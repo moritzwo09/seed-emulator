@@ -36,7 +36,7 @@ unless the task specifically concerns runtime artifacts.
 Think of the workflow as three separate contracts:
 
 1. Compile contract:
-   - `NativeKubernetesCompiler` turns a rendered SeedEMU emulator into
+   - `KubernetesCompiler` turns a rendered SeedEMU emulator into
      Kubernetes manifests and Docker build contexts.
    - The B61 example writes compiler output to `./output` by default.
    - Important files are `k8s.kube-ovn.yaml` or `k8s.yaml`, `images.yaml`,

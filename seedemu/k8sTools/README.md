@@ -67,6 +67,10 @@ Python entrypoints there:
 `kustomization.yaml`, rewrites OVN manifests when needed, reads image metadata
 from `images.yaml` or `images.txt`, builds/pushes images to the registry
 resolved from `configK3s.yaml`, applies the manifest, and waits for readiness.
+Before a remote registry-host build, it scans generated Dockerfiles for external
+`FROM` images, ensures those images exist on the local Docker daemon, and loads
+them into the registry host Docker daemon so buildx does not need to resolve
+compiler base images through Docker Hub from the master node.
 
 No persistent setup/running working directory is created by default. Persistent
 outputs are limited to the user-requested `configK3s.yaml`, `kubeconfig.yaml`,

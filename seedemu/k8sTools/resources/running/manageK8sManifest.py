@@ -409,7 +409,7 @@ def load_images(path: str) -> list[dict[str, str]]:
 
 
 def imagesFromText(text: str) -> list[dict[str, str]]:
-    """Parse one-image-reference-per-line metadata from NativeKubernetesCompiler.
+    """Parse one-image-reference-per-line metadata from KubernetesCompiler.
 
     Args:
         text: Contents of images.txt.
