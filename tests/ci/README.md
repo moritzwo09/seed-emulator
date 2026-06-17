@@ -11,7 +11,8 @@ The CI runner writes both human-readable logs and machine-readable artifacts:
 - `junit.xml` records the same stage in a format GitHub and review tooling can
   ingest.
 - `feature-coverage.json` records the manifest-derived coverage state, including
-  declared gaps such as IPv6 work that has not landed on this integration line.
+  covered features and declared gaps that have not landed on this integration
+  line.
 
 The static stage compiles importable Python source plus representative examples.
 It intentionally excludes embedded payload templates under
@@ -34,3 +35,8 @@ points, but they are not default pull-request gates in this PR:
 python3 tests/ci/run_ci.py example-build --artifact-dir ci-artifacts/example-build
 python3 tests/ci/run_ci.py runtime-integration --artifact-dir ci-artifacts/runtime-integration
 ```
+
+The runtime integration stage is kept as an explicit entry point for future
+Docker runtime probes. The current manifest does not enable any runtime group on
+this branch, so the stage is a reserved hook unless new groups are added to
+`feature_manifest.json`.

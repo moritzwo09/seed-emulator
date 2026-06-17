@@ -152,25 +152,47 @@ EOF
 ensureHelm() {
     # Print a helm binary path. If helm is not installed on the host, download a
     # private copy under ovn.helmCacheDir so no system package is modified.
-    if command -v helm >/dev/null 2>&1; then
+    helmUsable() {
+        # Args:
+        #   $1: helm binary candidate.
+        # A partial curl/tar extraction can leave an executable that segfaults.
+        # Validate by running `helm version` before trusting any cached binary.
+        local candidate="$1"
+        [ -x "${candidate}" ] || return 1
+        "${candidate}" version --short >/dev/null 2>&1
+    }
+
+    if command -v helm >/dev/null 2>&1 && helmUsable "$(command -v helm)"; then
         command -v helm
         return
     fi
 
     local helm_dir="${ovnHelmCacheDir}/bin"
     local helm_bin="${helm_dir}/helm"
-    if [ -x "${helm_bin}" ]; then
+    if helmUsable "${helm_bin}"; then
         echo "${helm_bin}"
         return
     fi
 
     mkdir -p "${helm_dir}" "${ovnHelmCacheDir}/download"
+    rm -f "${helm_bin}"
     local archive="${ovnHelmCacheDir}/download/helm-v3.15.4-linux-amd64.tar.gz"
+    local archive_tmp="${archive}.tmp"
     echo "[ovn] downloading private helm binary to ${helm_bin}" >&2
-    curl -fsSL https://get.helm.sh/helm-v3.15.4-linux-amd64.tar.gz -o "${archive}"
+    rm -f "${archive_tmp}"
+    curl --fail --location --show-error --retry 5 --retry-delay 2 --retry-all-errors \
+        https://get.helm.sh/helm-v3.15.4-linux-amd64.tar.gz -o "${archive_tmp}"
+    tar -tzf "${archive_tmp}" >/dev/null
+    mv "${archive_tmp}" "${archive}"
+    rm -rf "${ovnHelmCacheDir}/download/linux-amd64"
     tar -xzf "${archive}" -C "${ovnHelmCacheDir}/download"
     cp "${ovnHelmCacheDir}/download/linux-amd64/helm" "${helm_bin}"
     chmod +x "${helm_bin}"
+    if ! helmUsable "${helm_bin}"; then
+        rm -f "${helm_bin}"
+        echo "Downloaded helm binary is not usable: ${helm_bin}" >&2
+        exit 1
+    fi
     echo "${helm_bin}"
 }
 

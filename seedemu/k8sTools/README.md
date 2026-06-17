@@ -23,15 +23,18 @@ Deploy workload:
 python k8sTools.py up -f ./output -k kubeconfig.yaml -d configK3s.yaml
 ```
 
-`up` infers the logical compiler image prefix from `images.yaml`. Pass
+`up` infers the logical compiler image prefix from `images.yaml` or
+`images.txt`. Pass
 `--image-registry-prefix <prefix>` only when the compile output intentionally
 uses a non-standard or mixed prefix.
 
 Clean workload only:
 
 ```bash
-python k8sTools.py down -f ./output -k kubeconfig.yaml
+python k8sTools.py clean -f ./output -k kubeconfig.yaml
 ```
+
+`down` remains accepted as a compatibility alias for `clean`.
 
 Destroy infrastructure:
 
@@ -61,9 +64,9 @@ Python entrypoints there:
 
 `up` copies bundled `resources/running/` into a temporary directory and invokes
 `manageRunningStage.py preflight`, `build`, and `up`. The running stage renders
-`kustomization.yaml`, rewrites OVN manifests when needed, builds/pushes images
-to the registry resolved from `configK3s.yaml`, applies the manifest, and waits
-for readiness.
+`kustomization.yaml`, rewrites OVN manifests when needed, reads image metadata
+from `images.yaml` or `images.txt`, builds/pushes images to the registry
+resolved from `configK3s.yaml`, applies the manifest, and waits for readiness.
 
 No persistent setup/running working directory is created by default. Persistent
 outputs are limited to the user-requested `configK3s.yaml`, `kubeconfig.yaml`,

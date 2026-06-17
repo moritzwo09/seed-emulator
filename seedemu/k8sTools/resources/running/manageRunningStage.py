@@ -70,6 +70,7 @@ def context(config: Path) -> dict[str, str]:
         "masterConnection",
         "cniMasterInterface",
         "networkBackend",
+        "attachedCniType",
         "rolloutTimeoutSeconds",
     ]
     return {key: helperOutput(["config-value", "--config", str(config), "--key", key]) for key in keys}

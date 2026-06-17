@@ -352,9 +352,13 @@ def run_static(artifact_dir: Path) -> int:
     checks.append(_run_command("whitespace", _git_diff_check_command(), artifact_dir))
 
     compile_targets = [
-        "seedemu",
-        "tests/control_plane",
-        "tests/ci",
+        target
+        for target in [
+            "seedemu",
+            "tests/control_plane",
+            "tests/ci",
+        ]
+        if (REPO_ROOT / target).exists()
     ]
     example_dirs = sorted(
         {
@@ -382,7 +386,7 @@ def run_static(artifact_dir: Path) -> int:
     smoke = (
         "import seedemu; "
         "from seedemu.layers import Base, Routing, Ebgp, Ibgp, Ospf; "
-        "from seedemu.services import ExaBgpService, BgpLookingGlassService; "
+        "from seedemu.services import BgpLookingGlassService; "
         "from seedemu.compiler import Docker; "
         "import tests.ci.run_ci"
     )

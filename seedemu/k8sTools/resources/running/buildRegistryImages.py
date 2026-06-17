@@ -71,6 +71,7 @@ if [ -z "${IMAGE_REGISTRY_PREFIX}" ]; then
 fi
 
 IMAGES_YAML="${OUTPUT_DIR}/images.yaml"
+[ -s "${IMAGES_YAML}" ] || IMAGES_YAML="${OUTPUT_DIR}/images.txt"
 OUTPUT_DIR="$(cd "${OUTPUT_DIR}" && pwd)"
 cd "${OUTPUT_DIR}"
 
