@@ -63,17 +63,6 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
 
         return self
 
-    def createCluster(self, address: str) -> AutonomousSystem:
-        """!
-        @brief Backward-compatible alias for createBgpCluster.
-
-        @param address cluster ID rendered into the routing backend's Route
-        Reflector cluster field.
-
-        @returns self, for chaining API calls.
-        """
-        return self.createBgpCluster(address)
-
     def _validate_cluster_integrity(self, data: Dict[str, Tuple[Set[str], Set[str]]]):
         """!
         @brief Validate Route Reflector cluster membership.

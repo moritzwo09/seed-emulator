@@ -64,11 +64,10 @@ class Ebgp(Layer, Graphable):
         nextHopSelf: bool = True,
         routeServerClient: bool = False,
     ) -> None:
-        render_name = name if str(name).startswith("Ebgp_") else "Ebgp_{}".format(name)
         install_router_bgp_session(
             node,
             {
-                "name": render_name,
+                "name": name,
                 "kind": "ebgp",
                 "local_address": str(localAddress),
                 "local_asn": localAsn,
