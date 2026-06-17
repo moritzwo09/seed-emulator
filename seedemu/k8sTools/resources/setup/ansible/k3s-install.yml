@@ -140,6 +140,12 @@
       retries: 30
       delay: 5
 
+    - name: Fetch K3s binary for offline worker installs
+      fetch:
+        src: /usr/local/bin/k3s
+        dest: "/tmp/seedemu-k3s-binary-{{ k3s_install_version }}/k3s"
+        flat: yes
+
     - name: Install CNI plugins required by Multus (macvlan/ipvlan/static)
       shell: |
         set -euo pipefail
@@ -359,7 +365,7 @@
                     command:
                       - /thin_entrypoint
                     args:
-                      - --multus-conf-file=auto
+                      - --multus-conf-file=/tmp/multus-conf/00-multus.conf
                       - --multus-autoconfig-dir=/host/etc/cni/net.d
                       - --cni-conf-dir=/host/etc/cni/net.d
                     resources:
@@ -411,7 +417,7 @@
                       name: multus-cni-config
                       items:
                         - key: cni-conf.json
-                          path: 70-multus.conf
+                          path: 00-multus.conf
 
     - name: Install Multus CNI
       shell: k3s kubectl apply -f /tmp/seedemu-multus-daemonset.yml
@@ -548,9 +554,17 @@
         state: restarted
       when: k3s_agent_dir.stat.exists and k3s_agent_config.changed
 
+    - name: Copy K3s binary prepared on master to worker
+      copy:
+        src: "/tmp/seedemu-k3s-binary-{{ k3s_install_version }}/k3s"
+        dest: /usr/local/bin/k3s
+        mode: "0755"
+      when: not k3s_agent_dir.stat.exists or seed_k3s_force_reinstall | bool
+
     - name: Install K3s agent
       shell: |
-        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION={{ k3s_install_version }} \
+        curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_DOWNLOAD=true \
+          INSTALL_K3S_VERSION={{ k3s_install_version }} \
           INSTALL_K3S_ARTIFACT_URL={{ seed_k3s_artifact_url }} \
           K3S_URL=https://{{ hostvars[groups['master'][0]]['ansible_host'] }}:6443 \
           K3S_TOKEN={{ hostvars[groups['master'][0]]['k3s_server_token'] }} \

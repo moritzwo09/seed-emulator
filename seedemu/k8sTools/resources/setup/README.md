@@ -2,12 +2,12 @@
 
 这个目录是 `seedemu.k8sTools` 的内部资源目录。用户通常不会直接看到它，因为
 `K8sTools.build()` 会把这些资源复制到临时目录中执行，完成后只保留用户指定的
-`configK3s.yaml` 和 `kubeconfig.yaml`。
+`configK3s.yaml`、`kubeconfig.yaml`，以及可选的 `inventory.yaml`。
 
-所有用户侧入口都是 Python 文件；每个迁移中的系统操作入口旁边保留同名 `.sh`
-资源，Python 入口只负责调用相邻 shell。这样 shell 命令序列可以正常 review 和
-`bash -n` 检查。它们仍会调用系统工具，例如 `virsh`、`docker`、`kubectl`、
-`ssh`、`ansible-playbook` 和 `helm`；这些命令才是真正的 KVM、K3s、OVN/OVS
+所有用户侧和内部操作入口都是 Python 文件。部分复杂系统操作仍保留原 shell
+命令序列，但正文内嵌在对应 Python 入口中，不再依赖相邻 `.sh` 资源文件。
+这些入口仍会调用系统工具，例如 `virsh`、`docker`、`kubectl`、`ssh`、
+`ansible-playbook` 和 `helm`；这些命令才是真正的 KVM、K3s、OVN/OVS
 和镜像操作接口。
 
 ## 资源分组
@@ -74,7 +74,7 @@ ovn/installKubeOvnFabric.py
 | `kubeconfig.yaml` | `build` 的持久输出，供 `kubectl` 和 `up/down` 使用。 |
 | `kvmState.yaml` | 临时 KVM 清理状态，会嵌入最终 `configK3s.yaml` 的 `k8sTools.destroy` 元数据中。 |
 | `multiHostKvmState.yaml` | 临时多物理机 KVM 清理状态，会嵌入最终 `configK3s.yaml`。 |
-| `seedemu-k3s.inventory.yaml` | 临时解释性 inventory；当前 `k8sTools` 默认不把它作为用户主产物。 |
+| `inventory.yaml` | 可选持久集群 inventory；通过 `k8sTools.py build --inventory inventory.yaml` 写出，包含节点角色、管理 IP 和 CPU/memory/disk 容量。 |
 
 ## 手动调试提示
 
