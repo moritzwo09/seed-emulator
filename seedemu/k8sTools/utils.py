@@ -69,13 +69,13 @@ def copyResourceItems(
 
 
 def chmodScripts(path: str | Path) -> None:
-    """Make every bundled script entrypoint below path executable.
+    """Make every bundled Python script entrypoint below path executable.
 
     Args:
         path: Root directory copied from package resources.
     """
     root = Path(path).expanduser()
-    for script in [*root.rglob("*.py"), *root.rglob("*.sh")]:
+    for script in root.rglob("*.py"):
         mode = script.stat().st_mode
         script.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 

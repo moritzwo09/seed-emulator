@@ -1,4 +1,4 @@
-id: basic-a14-control-plane-regression
+id: basic-a63-control-plane-regression
 name: Control-Plane Regression
 description: A compact regression topology for route-server, mixed BIRD/FRR, FRR route-reflector, ExaBGP service, and MPLS readiness coverage.
 runner: internet
@@ -33,7 +33,7 @@ build:
 runtime:
   compose: output/docker-compose.yml
   readiness:
-    - name: A14 control-plane services are running
+    - name: A63 control-plane services are running
       type: compose-ps
       services:
         - rs_ix_ix100
@@ -89,6 +89,6 @@ probes:
     interval: 5
 
 test_programs:
-  - name: A14 control-plane regression runtime validation
+  - name: A63 control-plane regression runtime validation
     script: test_runtime.py
     timeout: 1200

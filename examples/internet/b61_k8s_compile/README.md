@@ -35,9 +35,16 @@ The default output directory is `./output`. To write elsewhere:
 python3 ./mini_internet_k8s.py --output-dir /tmp/seedemu-b61-output
 ```
 
-The compiler writes `k8s.kube-ovn.yaml`, `images.yaml`, and one Docker build
-context per compiled SeedEMU node. The default logical image prefix is
-`seedemu`, and the default namespace is `seedemu-k8s-b61`.
+To compile macvlan manifests instead of the default Kube-OVN/OVS manifests:
+
+```bash
+python3 ./mini_internet_k8s.py --cni-type macvlan
+```
+
+The default compiler mode writes `k8s.kube-ovn.yaml`, `images.yaml`, and one
+Docker build context per compiled SeedEMU node. `--cni-type macvlan` writes
+`k8s.yaml` with macvlan NetworkAttachmentDefinitions. `k8sTools.py up` also
+accepts `images.txt` metadata when present. The default namespace is `seedemu`.
 
 ## Common Deploy Commands
 
@@ -47,17 +54,19 @@ Every setup mode follows the same command shape:
 python3 ./k8sTools.py build \
   --input <one-config-yaml> \
   --config-k3s configK3s.yaml \
-  --kubeconfig kubeconfig.yaml
+  --kubeconfig kubeconfig.yaml \
+  --inventory inventory.yaml
 
 python3 ./k8sTools.py up -f ./output -k kubeconfig.yaml -d configK3s.yaml
-python3 ./k8sTools.py down -f ./output -k kubeconfig.yaml
+python3 ./k8sTools.py clean -f ./output -k kubeconfig.yaml
 python3 ./k8sTools.py destroy -d configK3s.yaml
 ```
 
-`build` creates or prepares infrastructure and writes `configK3s.yaml` plus
-`kubeconfig.yaml`. `up` builds/pushes workload images and applies the SeedEMU
-namespace. `down` removes only the workload namespace. `destroy` removes the
-K3s/OVN setup and any KVM infrastructure recorded in `configK3s.yaml`.
+`build` creates or prepares infrastructure and writes `configK3s.yaml`,
+`kubeconfig.yaml`, and `inventory.yaml`. `up` builds/pushes workload images and
+applies the SeedEMU namespace. `clean` removes only the workload namespace.
+`destroy` removes the K3s/OVN setup and any KVM infrastructure recorded in
+`configK3s.yaml`.
 
 Add `--keep-temp` to any `k8sTools.py` command when you need to inspect its
 temporary setup/running directory after a failure.
@@ -72,7 +81,8 @@ Use this when you want the shortest local KVM configuration.
 python3 ./k8sTools.py build \
   --input configKvmOvnSimply.yaml \
   --config-k3s configK3s.yaml \
-  --kubeconfig kubeconfig.yaml
+  --kubeconfig kubeconfig.yaml \
+  --inventory inventory.yaml
 ```
 
 This file is a minimal template for `kind: kvmOvn`. It only specifies the
@@ -89,7 +99,8 @@ Use this for a more explicit local KVM deployment.
 python3 ./k8sTools.py build \
   --input configKvmOvn.yaml \
   --config-k3s configK3s.yaml \
-  --kubeconfig kubeconfig.yaml
+  --kubeconfig kubeconfig.yaml \
+  --inventory inventory.yaml
 ```
 
 Compared with `configKvmOvnSimply.yaml`, this file pins VM names, IP ranges,
@@ -106,7 +117,8 @@ Use this when Kubernetes should be built on existing physical machines.
 python3 ./k8sTools.py build \
   --input configK3sOvn.yaml \
   --config-k3s configK3s.yaml \
-  --kubeconfig kubeconfig.yaml
+  --kubeconfig kubeconfig.yaml \
+  --inventory inventory.yaml
 ```
 
 Each `nodes[]` entry describes a real machine: `name`, `role`, management `ip`,
@@ -126,7 +138,8 @@ K3s cluster.
 python3 ./k8sTools.py build \
   --input configMultiHostKvmOvn.yaml \
   --config-k3s configK3s.yaml \
-  --kubeconfig kubeconfig.yaml
+  --kubeconfig kubeconfig.yaml \
+  --inventory inventory.yaml
 ```
 
 The `hypervisors[]` section describes each physical KVM host. Each hypervisor
@@ -175,10 +188,58 @@ ssh -i ~/.ssh/seedemu_k8s seed@192.0.2.11 'sudo -n true'
 ## Runtime Notes
 
 - `k8sTools.py up` infers the logical compiler image prefix from
-  `output/images.yaml`; use `--image-registry-prefix` only for custom outputs.
-- `k8sTools.py down` keeps the cluster infrastructure and only removes the
+  `output/images.yaml` or `output/images.txt`; use `--image-registry-prefix`
+  only for custom outputs.
+- During `up`, generated Dockerfile `FROM` images such as
+  `handsonsecurity/seedemu-base:2.0` and `handsonsecurity/seedemu-router:2.0`
+  are prepared on the local host first and then loaded into the registry/master
+  Docker daemon before remote buildx runs.
+- `k8sTools.py clean` keeps the cluster infrastructure and only removes the
   deployed SeedEMU workload.
 - `k8sTools.py destroy` uses metadata embedded in generated `configK3s.yaml`;
   do not delete that file before cleanup.
 - Real `build`, `up`, `down`, and `destroy` commands modify local or remote
   infrastructure. The compile step alone is non-destructive.
+
+## Quick Kubernetes Debug Commands
+
+Run these commands from this directory. Use the local stable kubeconfig
+explicitly so a stale `KUBECONFIG` from another experiment is not used by
+mistake:
+
+```bash
+export B61_NS=seedemu
+export B61_KUBECONFIG=./examples/internet/b61_k8s_compile/kubeconfig.yaml
+```
+
+Check namespace, nodes, and pod status:
+
+```bash
+kubectl --kubeconfig "${B61_KUBECONFIG}" get ns
+kubectl --kubeconfig "${B61_KUBECONFIG}" get namespace "${B61_NS}"
+kubectl --kubeconfig "${B61_KUBECONFIG}" get nodes -o wide
+kubectl --kubeconfig "${B61_KUBECONFIG}" -n "${B61_NS}" get pods -o wide
+kubectl --kubeconfig "${B61_KUBECONFIG}" -n "${B61_NS}" get pods -l seedemu.io/role=brd -o wide
+kubectl --kubeconfig "${B61_KUBECONFIG}" -n "${B61_NS}" get deploy -o wide
+kubectl --kubeconfig "${B61_KUBECONFIG}" -n "${B61_NS}" get events --sort-by='.lastTimestamp'
+```
+
+Inspect or enter one pod/deployment. Replace the object name with a real name
+from `kubectl get pods` or `kubectl get deploy`:
+
+```bash
+kubectl --kubeconfig "${B61_KUBECONFIG}" -n "${B61_NS}" describe pod <pod-name>
+kubectl --kubeconfig "${B61_KUBECONFIG}" -n "${B61_NS}" logs <pod-name> --tail=80
+kubectl --kubeconfig "${B61_KUBECONFIG}" -n "${B61_NS}" exec -it <pod-name> -- bash
+kubectl --kubeconfig "${B61_KUBECONFIG}" -n "${B61_NS}" exec -it deploy/<deploy-name> -- sh
+kubectl --kubeconfig "${B61_KUBECONFIG}" -n "${B61_NS}" exec deploy/<deploy-name> -- birdc show protocols
+```
+as1862brd-r13-1.13.7.70-7564dbb49c-9wctj
+
+Large post-BIRD runs can intermittently return `TLS handshake timeout`,
+`Client.Timeout exceeded`, or `http2: client connection lost` while VM CPUs are
+saturated. First retry the same command with an explicit request timeout:
+
+```bash
+kubectl --kubeconfig "${B61_KUBECONFIG}" --request-timeout=120s -n "${B61_NS}" get pods -l seedemu.io/role=brd -o wide
+```

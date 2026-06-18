@@ -50,22 +50,32 @@ def temporaryWorkDir(prefix: str, keep_temp: bool = False) -> Iterator[Path]:
 
 
 def inferImageRegistryPrefix(output_dir: Path) -> str:
-    """Infer the compiler image prefix from images.yaml.
+    """Infer the compiler image prefix from generated image metadata.
 
     Args:
-        output_dir: Compile output directory containing images.yaml.
+        output_dir: Compile output directory containing images.yaml or images.txt.
     """
     images_path = output_dir / "images.yaml"
-    if not images_path.exists():
+    if images_path.exists():
+        data = loadYaml(images_path)
+        images = data.get("images") if isinstance(data.get("images"), list) else []
+        for item in images:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            if "/" in name:
+                return name.rsplit("/", 1)[0]
         return "seedemu"
-    data = loadYaml(images_path)
-    images = data.get("images") if isinstance(data.get("images"), list) else []
-    for item in images:
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name") or "").strip()
-        if "/" in name:
-            return name.rsplit("/", 1)[0]
+
+    images_txt = output_dir / "images.txt"
+    if images_txt.exists():
+        for line in images_txt.read_text(encoding="utf-8").splitlines():
+            name = line.strip()
+            if not name or name.startswith("#"):
+                continue
+            if "/" in name:
+                return name.rsplit("/", 1)[0]
+            return "seedemu"
     return "seedemu"
 
 
@@ -74,6 +84,7 @@ def buildCluster(
     config_k3s: str | Path,
     kubeconfig: str | Path,
     *,
+    inventory: str | Path | None = None,
     keep_temp: bool = False,
 ) -> None:
     """Build KVM/physical infrastructure and write final config outputs.
@@ -82,6 +93,7 @@ def buildCluster(
         input_config: User YAML with explicit `kind`.
         config_k3s: Final configK3s.yaml path requested by the user.
         kubeconfig: Final kubeconfig path requested by the user.
+        inventory: Optional final cluster inventory YAML path requested by the user.
         keep_temp: Keep temporary setup resources for debugging.
 
     The first-phase implementation expands bundled setup resources into a
@@ -92,6 +104,7 @@ def buildCluster(
     input_path = resolvePath(input_config)
     config_path = resolvePath(config_k3s)
     kubeconfig_path = resolvePath(kubeconfig)
+    inventory_path = resolvePath(inventory) if inventory is not None else None
     source = loadYaml(input_path)
     kind = detectKind(source, input_path)
 
@@ -99,11 +112,11 @@ def buildCluster(
         setup_dir = copyTree("setup", root / "setup", overwrite=True)
         chmodScripts(setup_dir)
         if kind == "kvmOvn":
-            _buildKvmOvn(setup_dir, input_path, config_path, kubeconfig_path)
+            _buildKvmOvn(setup_dir, input_path, config_path, kubeconfig_path, inventory_path)
         elif kind == "multiHostKvmOvn":
-            _buildMultiHostKvmOvn(setup_dir, input_path, config_path, kubeconfig_path)
+            _buildMultiHostKvmOvn(setup_dir, input_path, config_path, kubeconfig_path, inventory_path)
         elif kind == "physicalOvn":
-            _buildPhysicalOvn(setup_dir, input_path, config_path, kubeconfig_path)
+            _buildPhysicalOvn(setup_dir, input_path, config_path, kubeconfig_path, inventory_path)
         else:
             raise ValueError(f"unsupported kind: {kind}")
 
@@ -253,14 +266,20 @@ def destroyCluster(config_k3s: str | Path, *, keep_temp: bool = False) -> None:
             raise ValueError(f"unsupported destroy type: {destroy_type}")
 
 
-def _buildKvmOvn(setup_dir: Path, input_path: Path, config_path: Path, kubeconfig_path: Path) -> None:
+def _buildKvmOvn(
+    setup_dir: Path,
+    input_path: Path,
+    config_path: Path,
+    kubeconfig_path: Path,
+    inventory_path: Path | None,
+) -> None:
     """Build a single-hypervisor KVM cluster with Kube-OVN."""
     kvm_config = makeKvmConfig(
         config=input_path,
         setup_dir=setup_dir,
         k3s_config_path=setup_dir / "configK3s.yaml",
         kubeconfig_path=kubeconfig_path,
-        inventory_path=setup_dir / "cluster.inventory.yaml",
+        inventory_path=inventory_path or setup_dir / "cluster.inventory.yaml",
         tmp_dir=setup_dir / "tmp",
     )
     kvm_config.setdefault("fabric", {})["type"] = "ovn"
@@ -283,7 +302,13 @@ def _buildKvmOvn(setup_dir: Path, input_path: Path, config_path: Path, kubeconfi
     writeYaml(config_path, final_config)
 
 
-def _buildMultiHostKvmOvn(setup_dir: Path, input_path: Path, config_path: Path, kubeconfig_path: Path) -> None:
+def _buildMultiHostKvmOvn(
+    setup_dir: Path,
+    input_path: Path,
+    config_path: Path,
+    kubeconfig_path: Path,
+    inventory_path: Path | None,
+) -> None:
     """Build a multi-hypervisor KVM cluster with routed VM subnets and Kube-OVN."""
     source = loadYaml(input_path)
     source.setdefault("fabric", {})["type"] = "ovn"
@@ -291,7 +316,12 @@ def _buildMultiHostKvmOvn(setup_dir: Path, input_path: Path, config_path: Path, 
     outputs = source.setdefault("outputs", {})
     outputs["k3sConfig"] = str(setup_dir / "configK3s.yaml")
     outputs["multiHostKvmState"] = str(setup_dir / "multiHostKvmState.yaml")
-    setOutputPaths(source, kubeconfig=kubeconfig_path, tmp_dir=setup_dir / "tmp", inventory=setup_dir / "cluster.inventory.yaml")
+    setOutputPaths(
+        source,
+        kubeconfig=kubeconfig_path,
+        tmp_dir=setup_dir / "tmp",
+        inventory=inventory_path or setup_dir / "cluster.inventory.yaml",
+    )
     temp_input = setup_dir / "multiHostInput.yaml"
     writeYaml(temp_input, source)
     kvm_config = makeMultiHostKvmConfig(config=temp_input, setup_dir=setup_dir)
@@ -313,13 +343,24 @@ def _buildMultiHostKvmOvn(setup_dir: Path, input_path: Path, config_path: Path, 
     writeYaml(config_path, final_config)
 
 
-def _buildPhysicalOvn(setup_dir: Path, input_path: Path, config_path: Path, kubeconfig_path: Path) -> None:
+def _buildPhysicalOvn(
+    setup_dir: Path,
+    input_path: Path,
+    config_path: Path,
+    kubeconfig_path: Path,
+    inventory_path: Path | None,
+) -> None:
     """Build a K3s + Kube-OVN cluster on existing physical nodes."""
     config = loadYaml(input_path)
     config["kind"] = "physicalOvn"
     config.setdefault("fabric", {})["type"] = "ovn"
     _applyOvnK3sDefaults(config)
-    setOutputPaths(config, kubeconfig=kubeconfig_path, tmp_dir=setup_dir / "tmp", inventory=setup_dir / "cluster.inventory.yaml")
+    setOutputPaths(
+        config,
+        kubeconfig=kubeconfig_path,
+        tmp_dir=setup_dir / "tmp",
+        inventory=inventory_path or setup_dir / "cluster.inventory.yaml",
+    )
     writeYaml(setup_dir / "configK3s.yaml", config)
     runCommand(["python3", str(setup_dir / "preparePhysicalNodes.py"), str(setup_dir / "configK3s.yaml")], cwd=setup_dir)
     runCommand(["python3", str(setup_dir / "applyK3sCluster.py"), str(setup_dir / "configK3s.yaml")], cwd=setup_dir)

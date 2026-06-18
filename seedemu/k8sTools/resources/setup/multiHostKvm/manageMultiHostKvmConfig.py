@@ -576,7 +576,7 @@ def writeHostNetworkXml(args: argparse.Namespace) -> None:
 
 
 def writeHostLocalKvm(args: argparse.Namespace) -> None:
-    """Write host-local kvm.yaml consumed by kvm/createKvmVms.sh."""
+    """Write host-local kvm.yaml consumed by kvm/createKvmVms.py."""
     data = loadYaml(args.config)
     host = requireHost(hostList(data), args.host)
     vm_ssh = data.get("vmSsh") if isinstance(data.get("vmSsh"), dict) else {}
@@ -631,6 +631,9 @@ def writeGlobalK3sConfig(args: argparse.Namespace) -> None:
                 "name": node["name"],
                 "role": node["role"],
                 "ip": node["ip"],
+                "vcpus": int(node.get("vcpus") or 0),
+                "memoryMb": int(node.get("memoryMb") or node.get("memory_mb") or 0),
+                "diskGb": int(node.get("diskGb") or node.get("disk_gb") or 0),
                 "ssh": {"user": ssh_user, "key": ssh_key},
             }
             for node in vmPlan(data)
