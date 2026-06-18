@@ -24,10 +24,6 @@ ROUTER_BGP_ROLE_EDGE = "edge"
 ROUTER_BGP_ROLE_CORE = "core"
 ROUTER_BGP_ROLES = {ROUTER_BGP_ROLE_EDGE, ROUTER_BGP_ROLE_CORE}
 
-ROUTER_CONTROL_PLANE_ROLE_EDGE = ROUTER_BGP_ROLE_EDGE
-ROUTER_CONTROL_PLANE_ROLE_CORE = ROUTER_BGP_ROLE_CORE
-ROUTER_CONTROL_PLANE_ROLES = ROUTER_BGP_ROLES
-
 class File(Printable):
     """!
     @brief File class.
@@ -1187,18 +1183,6 @@ class Router(Node):
         @returns role name, or None if no role was set.
         """
         return self.__bgp_role
-
-    def setControlPlaneRole(self, role: str) -> Router:
-        """!
-        @brief Deprecated compatibility wrapper for setBgpRole().
-        """
-        return self.setBgpRole(role)
-
-    def getControlPlaneRole(self) -> Optional[str]:
-        """!
-        @brief Deprecated compatibility wrapper for getBgpRole().
-        """
-        return self.getBgpRole()
 
     def disableControlPlane(self, protocol: str) -> Router:
         """!

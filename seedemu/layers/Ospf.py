@@ -26,7 +26,6 @@ class Ospf(Layer):
     __stubs: Set[Tuple[int, str]]
     __masked: Set[Tuple[int, str]]
     __masked_asn: Set[int]
-    __as_modes: Dict[int, str]
 
     def __init__(self):
         """!
@@ -36,44 +35,11 @@ class Ospf(Layer):
         self.__stubs = set()
         self.__masked = set()
         self.__masked_asn = set()
-        self.__as_modes = {}
 
         self.addDependency('Routing', False, False)
 
     def getName(self) -> str:
         return 'Ospf'
-
-    def setAsMode(self, asn: int, mode: str) -> Ospf:
-        """!
-        @brief Set OSPF interface classification mode for an AS.
-
-        The default legacy mode preserves historical behavior. The
-        router-transit-only mode makes only Local networks with at least two
-        router-like nodes active and keeps host-facing Local networks passive.
-
-        @param asn AS to configure.
-        @param mode legacy or router-transit-only.
-
-        @returns self, for chaining API calls.
-        """
-        value = str(mode or OSPF_MODE_LEGACY).strip().lower()
-        assert value in OSPF_MODES, "unsupported OSPF mode: {}".format(mode)
-        self.__as_modes[int(asn)] = value
-        return self
-
-    def getAsMode(self, asn: int) -> str:
-        """!
-        @brief Get OSPF interface classification mode for an AS.
-        """
-        return self.__as_modes.get(int(asn), OSPF_MODE_LEGACY)
-
-    def getConfiguredAsMode(self, asn: int):
-        """!
-        @brief Get the compatibility-layer OSPF mode explicitly set here.
-
-        New code should prefer AutonomousSystem.setOspfMode(...).
-        """
-        return self.__as_modes.get(int(asn))
 
     def markAsStub(self, asn: int, netname: str) -> Ospf:
         """!
@@ -213,8 +179,6 @@ class Ospf(Layer):
 
             self._log('setting up OSPF for router as{}/{}...'.format(scope, name))
             asobj = base.getAutonomousSystem(int(scope))
-            if int(scope) in self.__as_modes:
-                asobj.setOspfMode(self.__as_modes[int(scope)])
             stub_networks = [net for (asn, net) in self.__stubs if asn == int(scope)]
             masked_networks = [net for (asn, net) in self.__masked if asn == int(scope)]
             if asobj.getOspfMode() == OSPF_MODE_ROUTER_TRANSIT_ONLY:
