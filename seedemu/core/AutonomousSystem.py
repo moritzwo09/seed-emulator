@@ -20,16 +20,10 @@ IBGP_MODE_FULL_MESH = "full-mesh"
 IBGP_MODE_ROUTE_REFLECTOR = "route-reflector"
 IBGP_MODE_DISABLED = "disabled"
 
-IBGP_MODE_LEGACY_FULL_MESH = "legacy-full-mesh"
-IBGP_MODE_EDGE_FULL_MESH = "edge-full-mesh"
-
 IBGP_MODES = {
     IBGP_MODE_FULL_MESH,
     IBGP_MODE_ROUTE_REFLECTOR,
     IBGP_MODE_DISABLED,
-}
-IBGP_MODE_ALIASES = {
-    IBGP_MODE_LEGACY_FULL_MESH: IBGP_MODE_FULL_MESH,
 }
 
 BGP_SCOPE_ALL_ROUTERS = "all-routers"
@@ -67,10 +61,12 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
     __nets: Dict[str, Network]
     __name_servers: List[str]
     __clusters: Dict[str, Tuple[Set[str], Set[str]]]
-    __ibgp_mode: Optional[str]
+    __ibgp_mode: str
+    __ibgp_mode_explicit: bool
     __bgp_scope: str
     __core_forwarding: str
-    __ospf_mode: Optional[str]
+    __ospf_mode: str
+    __ospf_mode_explicit: bool
 
     def __init__(self, asn: int, subnetTemplate: str = "10.{}.0.0/16"):
         """!
@@ -87,10 +83,12 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
         self.__subnets = None if asn > 255 else list(IPv4Network(subnetTemplate.format(asn)).subnets(new_prefix = 24))
         self.__name_servers = []
         self.__clusters = {}
-        self.__ibgp_mode = None
+        self.__ibgp_mode = IBGP_MODE_FULL_MESH
+        self.__ibgp_mode_explicit = False
         self.__bgp_scope = BGP_SCOPE_ALL_ROUTERS
         self.__core_forwarding = CORE_FORWARDING_PLAIN_IP
-        self.__ospf_mode = None
+        self.__ospf_mode = OSPF_MODE_LEGACY
+        self.__ospf_mode_explicit = False
 
     def setIbgpMode(self, mode: str) -> AutonomousSystem:
         """!
@@ -108,28 +106,24 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
             mode, sorted(IBGP_MODES)
         )
         self.__ibgp_mode = value
+        self.__ibgp_mode_explicit = True
         return self
 
     def _normalizeIbgpMode(self, mode: str) -> str:
         value = str(mode or IBGP_MODE_FULL_MESH).strip().lower()
-        if value in IBGP_MODE_ALIASES:
-            return IBGP_MODE_ALIASES[value]
-        if value == IBGP_MODE_EDGE_FULL_MESH:
-            self.setBgpScope(BGP_SCOPE_EDGE_ONLY)
-            return IBGP_MODE_FULL_MESH
         return value
 
     def getIbgpMode(self) -> str:
         """!
         @brief Get the AS-level iBGP route propagation mode.
         """
-        return self.__ibgp_mode or IBGP_MODE_FULL_MESH
+        return self.__ibgp_mode
 
     def hasIbgpMode(self) -> bool:
         """!
         @brief Return whether an iBGP mode was explicitly set on this AS.
         """
-        return self.__ibgp_mode is not None
+        return self.__ibgp_mode_explicit
 
     def setBgpScope(self, scope: str) -> AutonomousSystem:
         """!
@@ -201,19 +195,20 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
         value = str(mode or OSPF_MODE_LEGACY).strip().lower()
         assert value in OSPF_MODES, "unsupported OSPF mode: {}".format(mode)
         self.__ospf_mode = value
+        self.__ospf_mode_explicit = True
         return self
 
     def getOspfMode(self) -> str:
         """!
         @brief Get the AS-level OSPF interface classification mode.
         """
-        return self.__ospf_mode or OSPF_MODE_LEGACY
+        return self.__ospf_mode
 
     def hasOspfMode(self) -> bool:
         """!
         @brief Return whether an OSPF mode was explicitly set on this AS.
         """
-        return self.__ospf_mode is not None
+        return self.__ospf_mode_explicit
 
     def createBgpCluster(self, address: str) -> AutonomousSystem:
         """!
@@ -227,18 +222,19 @@ class AutonomousSystem(Printable, Graphable, Configurable, Customizable):
         @returns self, for chaining API calls.
         """
         self.__ensureRouteReflectorModeAllowed("createBgpCluster")
-        if self.__ibgp_mode is None:
+        if not self.__ibgp_mode_explicit:
             self.__ibgp_mode = IBGP_MODE_ROUTE_REFLECTOR
+            self.__ibgp_mode_explicit = True
         if address not in self.__clusters:
             self.__clusters[address] = (set(), set())
 
         return self
 
     def __ensureRouteReflectorModeAllowed(self, api_name: str) -> None:
-        if self.__ibgp_mode == IBGP_MODE_FULL_MESH:
+        if self.__ibgp_mode_explicit and self.__ibgp_mode != IBGP_MODE_ROUTE_REFLECTOR:
             raise AssertionError(
-                "AS{} cannot call {} while ibgp_mode is full-mesh".format(
-                    self.__asn, api_name
+                "AS{} cannot call {} while ibgp_mode is {}".format(
+                    self.__asn, api_name, self.__ibgp_mode
                 )
             )
 
