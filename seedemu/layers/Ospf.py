@@ -1,10 +1,15 @@
 from __future__ import annotations
 from seedemu.core import Node, Emulator, Layer
-from seedemu.core.enums import NetworkType
+from seedemu.core.enums import NetworkType, NodeRole
 from typing import Set, Dict, List, Tuple
+from .Base import Base
 from ._bgp_metadata import classify_ospf_interfaces, set_ospf_interface_intents
 
 OspfFileTemplates: Dict[str, str] = {}
+
+OSPF_MODE_LEGACY = "legacy"
+OSPF_MODE_ROUTER_TRANSIT_ONLY = "router-transit-only"
+OSPF_MODES = {OSPF_MODE_LEGACY, OSPF_MODE_ROUTER_TRANSIT_ONLY}
 
 class Ospf(Layer):
     """!
@@ -124,8 +129,48 @@ class Ospf(Layer):
         """
         return (asn, netname) in self.__masked
 
+    def __is_router_transit_network(self, node: Node, netname: str) -> bool:
+        for iface in node.getInterfaces():
+            net = iface.getNet()
+            if str(net.getName()) != str(netname):
+                continue
+            if net.getType() != NetworkType.Local:
+                return False
+            router_count = 0
+            for candidate in net.getAssociations():
+                role = candidate.getRole()
+                if role in {NodeRole.Router, NodeRole.BorderRouter, NodeRole.OpenVpnRouter}:
+                    router_count += 1
+            return router_count >= 2
+        return False
+
+    def __classify_router_transit_interfaces(
+        self,
+        router: Node,
+        stubs: List[str],
+        masked: List[str]
+    ) -> Tuple[List[str], List[str]]:
+        stub_names = {str(name) for name in stubs}
+        masked_names = {str(name) for name in masked}
+        active: List[str] = []
+        passive: List[str] = ["dummy0"]
+        for iface in router.getInterfaces():
+            net = iface.getNet()
+            name = str(net.getName())
+            if name in masked_names:
+                continue
+            if name in stub_names:
+                passive.append(name)
+                continue
+            if self.__is_router_transit_network(router, name):
+                active.append(name)
+            else:
+                passive.append(name)
+        return active, passive
+
     def configure(self, emulator: Emulator):
         reg = emulator.getRegistry()
+        base: Base = reg.get('seedemu', 'layer', 'Base')
 
         for ((scope, type, name), obj) in reg.getAll().items():
             if type != 'rnode': continue
@@ -133,11 +178,21 @@ class Ospf(Layer):
             if router.getAsn() in self.__masked_asn: continue
 
             self._log('setting up OSPF for router as{}/{}...'.format(scope, name))
-            active, stubs = classify_ospf_interfaces(
-                router,
-                stubs=[net for (asn, net) in self.__stubs if asn == int(scope)],
-                masked=[net for (asn, net) in self.__masked if asn == int(scope)],
-            )
+            asobj = base.getAutonomousSystem(int(scope))
+            stub_networks = [net for (asn, net) in self.__stubs if asn == int(scope)]
+            masked_networks = [net for (asn, net) in self.__masked if asn == int(scope)]
+            if asobj.getOspfMode() == OSPF_MODE_ROUTER_TRANSIT_ONLY:
+                active, stubs = self.__classify_router_transit_interfaces(
+                    router,
+                    stubs=stub_networks,
+                    masked=masked_networks,
+                )
+            else:
+                active, stubs = classify_ospf_interfaces(
+                    router,
+                    stubs=stub_networks,
+                    masked=masked_networks,
+                )
             set_ospf_interface_intents(router, active, stubs)
 
     def render(self, emulator: Emulator):
