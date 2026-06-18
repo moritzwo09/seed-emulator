@@ -52,13 +52,13 @@ class FaucetUserServer(Server):
         """
         node.appendClassName("FaucetUserService")
         node.addSoftware('python3 python3-pip')
-        node.addBuildCommand('pip3 install eth_account==0.5.9 requests')
+        node.addBuildCommand('pip3 install --break-system-packages eth_account==0.5.9 requests || pip3 install eth_account==0.5.9 requests')
         node.setFile(self.DIR_PREFIX + '/fundme.py', 
                      FaucetServerFileTemplates['fundme'].format(
                            faucet_url=self.__faucet_util.getFacuetUrl(),
                            faucet_fund_url=self.__faucet_util.getFaucetFundUrl()))
-        node.appendStartCommand('chmod +x {}/fund.py'.format(self.DIR_PREFIX))
-        node.appendStartCommand(self.DIR_PREFIX + '/fund.py')
+        node.appendStartCommand('chmod +x {}/fundme.py'.format(self.DIR_PREFIX))
+        node.appendStartCommand(self.DIR_PREFIX + '/fundme.py')
 
     def print(self, indent: int) -> str:
         out = ' ' * indent

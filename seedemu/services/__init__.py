@@ -10,6 +10,7 @@ from .BgpLookingGlassService import BgpLookingGlassServer, BgpLookingGlassServic
 from .DHCPService import DHCPServer, DHCPService
 from .EthereumService import *
 from .MoneroService import *
+from .SolanaService import *
 from .ScionBwtestService import ScionBwtestService
 from .ScionBwtestClientService import ScionBwtestClientService
 from .KuboService import *
@@ -17,3 +18,5 @@ from .CAService import CAService, CAServer, RootCAStore
 from .ChainlinkService import *
 from .TrafficService import *
 from .DevService import *
+from .CDNService import CDNService, CDNOriginServer, CDNEdgeServer
+from .ExaBgpService import ExaBgpService, ExaBgpServer
