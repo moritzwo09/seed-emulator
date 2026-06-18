@@ -112,6 +112,7 @@ def build_frr_route_reflector_slice(base: Base, ebgp: Ebgp) -> None:
 
     as3 = base.createAutonomousSystem(3)
     as3.createNetwork("net0")
+    as3.setIbgpMode("route-reflector")
     as3.createBgpCluster(AS3_CLUSTER_ID)
     as3.createRouter("rr", routingBackend="frr").joinNetwork("net0").joinNetwork("ix103").joinBgpCluster(AS3_CLUSTER_ID).makeRouteReflector()
     as3.createRouter("client", routingBackend="frr").joinNetwork("net0").joinBgpCluster(AS3_CLUSTER_ID)

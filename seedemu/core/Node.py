@@ -20,6 +20,14 @@ from .BaseSystem import BaseSystem
 
 DEFAULT_SOFTWARE: List[str] = ['zsh', 'curl', 'nano', 'vim-nox', 'mtr-tiny', 'iproute2', 'iputils-ping', 'tcpdump', 'termshark', 'dnsutils', 'jq', 'ipcalc', 'netcat-openbsd']
 
+ROUTER_BGP_ROLE_EDGE = "edge"
+ROUTER_BGP_ROLE_CORE = "core"
+ROUTER_BGP_ROLES = {ROUTER_BGP_ROLE_EDGE, ROUTER_BGP_ROLE_CORE}
+
+ROUTER_CONTROL_PLANE_ROLE_EDGE = ROUTER_BGP_ROLE_EDGE
+ROUTER_CONTROL_PLANE_ROLE_CORE = ROUTER_BGP_ROLE_CORE
+ROUTER_CONTROL_PLANE_ROLES = ROUTER_BGP_ROLES
+
 class File(Printable):
     """!
     @brief File class.
@@ -1100,16 +1108,6 @@ RouterFileTemplates['rw_configure_script'] = '''\
 #!/bin/bash
 '''
 
-ROUTER_CONTROL_PLANE_ROLE_EDGE = "edge"
-ROUTER_CONTROL_PLANE_ROLE_CORE = "core"
-ROUTER_CONTROL_PLANE_ROLE_RR = "rr"
-ROUTER_CONTROL_PLANE_ROLE_RR_CLIENT = "rr-client"
-
-ROUTER_CONTROL_PLANE_ROLES = {
-    ROUTER_CONTROL_PLANE_ROLE_EDGE,
-    ROUTER_CONTROL_PLANE_ROLE_CORE,
-}
-
 fill_placeholder = """\
 gw="`ip rou show default | cut -d' ' -f3`"
 if [ -z "$gw" ]; then
@@ -1147,7 +1145,7 @@ class Router(Node):
     __is_bgp_rr: bool
     __bgp_cluster_id: Optional[str]
     __routing_backend: str
-    __control_plane_role: Optional[str]
+    __bgp_role: Optional[str]
     __disabled_control_planes: Set[str]
     __extensions: Dict[str, RouterExtension]
 
@@ -1157,39 +1155,50 @@ class Router(Node):
         self.__is_bgp_rr = False
         self.__bgp_cluster_id = None
         self.__routing_backend = "bird"
-        self.__control_plane_role = None
+        self.__bgp_role = None
         self.__disabled_control_planes = set()
         self.__extensions = {}
         super().__init__( name,role,asn,scope)
         self.setRoutingBackend(routingBackend)
 
-    def setControlPlaneRole(self, role: str) -> Router:
+    def setBgpRole(self, role: str) -> Router:
         """!
-        @brief Set a routing control-plane role hint for this router.
+        @brief Set this router's BGP participation role.
 
-        This does not change legacy routing behavior by itself. Protocol layers
-        such as Ibgp may use the role in opt-in modes to decide whether this
-        router should participate as an edge or core node. Route-reflector
-        state is intentionally modeled separately with joinBgpCluster() and
-        makeRouteReflector(), so a router can be both edge/core and RR.
+        This does not change the structural NodeRole. It is an AS-level routing
+        hint used by iBGP designs such as edge-only BGP with a BGP-free core.
 
         @param role edge or core.
 
         @returns self, for chaining API calls.
         """
         value = str(role or "").strip().lower()
-        assert value in ROUTER_CONTROL_PLANE_ROLES, "unsupported control-plane role: {}".format(role)
-        self.__control_plane_role = value
-        self.setLabel("seedemu_control_plane_role", value)
+        assert value in ROUTER_BGP_ROLES, "unsupported BGP role: {}. valid values: {}".format(
+            role, sorted(ROUTER_BGP_ROLES)
+        )
+        self.__bgp_role = value
+        self.setLabel("seedemu_bgp_role", value)
         return self
 
-    def getControlPlaneRole(self) -> Optional[str]:
+    def getBgpRole(self) -> Optional[str]:
         """!
-        @brief Get this router's optional routing control-plane role hint.
+        @brief Get this router's optional BGP participation role.
 
         @returns role name, or None if no role was set.
         """
-        return self.__control_plane_role
+        return self.__bgp_role
+
+    def setControlPlaneRole(self, role: str) -> Router:
+        """!
+        @brief Deprecated compatibility wrapper for setBgpRole().
+        """
+        return self.setBgpRole(role)
+
+    def getControlPlaneRole(self) -> Optional[str]:
+        """!
+        @brief Deprecated compatibility wrapper for getBgpRole().
+        """
+        return self.getBgpRole()
 
     def disableControlPlane(self, protocol: str) -> Router:
         """!

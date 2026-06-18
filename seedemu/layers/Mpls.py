@@ -9,7 +9,7 @@ from ._bgp_metadata import install_router_bgp_session
 
 MplsFileTemplates: Dict[str, str] = {}
 
-MPLS_PRESERVED_IBGP_MODES = {"edge-full-mesh", "route-reflector", "explicit"}
+MPLS_PRESERVED_IBGP_MODES = {"edge-full-mesh", "route-reflector"}
 MPLS_DISABLED_IBGP_MODES = {"disabled"}
 
 MplsFileTemplates['frr_start_script'] = """\
