@@ -6,3 +6,4 @@ from .DistributedDocker import DistributedDocker
 from .Graphviz import Graphviz
 from .GcpDistributedDocker import GcpDistributedDocker
 from .kubernetes import KubernetesCompiler, NativeKubernetesCompiler, SchedulingStrategy
+from .ScionTopoCompiler import ScionTopoCompiler
