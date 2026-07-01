@@ -2,7 +2,7 @@ import json
 from typing import List, Tuple, Union
 
 from tests.SeedEmuTestCase import SeedEmuTestCase
-from .tools.scion_output_checker import ScionOutputChecker
+from ..tools.scion_output_checker import ScionOutputChecker
 class ScionTestCase(SeedEmuTestCase):
     """!
     @brief Extends SeedEmuTestCase with SCION-specific tests.

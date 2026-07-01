@@ -2,7 +2,7 @@
 
 from internet import IPAnyCastTestCase, MiniInternetTestCase, HostMgmtTestCase, DNSTestCase, DNSTestCaseNoMaster, DNSTestCaseFallback
 from ethereum import EthereumPOATestCase, EthereumPOSTestCase, EthereumPOWTestCase
-from scion import ScionBgpMixedTestCase, ScionBwtesterTestCase, ScionLargeASNTestCase
+from tests.scion.scion_topo_generator import ScionBgpMixedTestCase, ScionBwtesterTestCase, ScionLargeASNTestCase
 from options import SEEDEmuOptionSystemTestCase
 from kubo import KuboTestCase, KuboUtilFuncsTestCase, DottedDictTestCase
 from pki import PKITestCase

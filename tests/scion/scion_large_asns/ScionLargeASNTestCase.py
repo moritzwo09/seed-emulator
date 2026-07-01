@@ -4,7 +4,7 @@ import time
 import unittest as ut
 
 from seedemu.core.ScionAutonomousSystem import IA, ScionASN
-from tests.scion import ScionTestCase
+from tests.scion.scion_topo_generator import ScionTestCase
 
 
 class ScionLargeASNTestCase(ScionTestCase):

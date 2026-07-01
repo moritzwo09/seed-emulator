@@ -2,7 +2,7 @@
 
 import time
 import unittest as ut
-from tests.scion import ScionTestCase
+from tests.scion.scion_topo_generator import ScionTestCase
 
 class ScionBwtesterTestCase(ScionTestCase):
     """!
