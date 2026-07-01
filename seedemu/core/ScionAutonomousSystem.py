@@ -153,6 +153,7 @@ class ScionAutonomousSystem(AutonomousSystem):
         self.__keys = None
         self.__attributes = defaultdict(set)
         self.__mtu = None
+        self.__underlay = None
         self.__beaconing_intervals = (None, None, None)
         self.__beaconing_policy = {}
         self.__note = None
@@ -207,6 +208,35 @@ class ScionAutonomousSystem(AutonomousSystem):
         """
         assert self.__keys is not None, "AS is not configured yet"
         return self.__keys
+
+    def getMtu(self) -> Optional[int]:
+        """!
+        @brief Get the AS-wide MTU (minimum of all internal network MTUs).
+
+        @returns MTU value, or None if configure() has not been called yet.
+        """
+        return self.__mtu
+
+    def setUnderlay(self, protocol: str) -> 'ScionAutonomousSystem':
+        """!
+        @brief Set the underlay protocol for this AS (e.g. "UDP/IPv6").
+
+        When compiling with ScionTopoCompiler, this value is written as
+        the 'underlay' field in the AS section of the .topo file.
+
+        @param protocol Underlay protocol string (e.g. "UDP/IPv4", "UDP/IPv6").
+        @returns self
+        """
+        self.__underlay = protocol
+        return self
+
+    def getUnderlay(self) -> Optional[str]:
+        """!
+        @brief Get the underlay protocol for this AS.
+
+        @returns Underlay protocol string, or None if not set.
+        """
+        return self.__underlay
 
     def setAsAttributes(self, isd: int, attributes: Iterable[str]) -> ScionAutonomousSystem:
         """!

@@ -431,7 +431,7 @@ class Scion(Layer, Graphable):
     alone do not uniquely identify a SCION AS (see ScionISD layer).
     """
 
-    __links: Dict[Tuple[IA, IA, str, str, LinkType], int]
+    __links: Dict[Tuple[IA, IA, str, str, LinkType], Dict[str, Any]]
     __ix_links: Dict[Tuple[int, IA, IA, str, str, LinkType], Dict[str,Any] ]
     __if_ids_by_as = {} # Dict[IA, Set[int]]
 
@@ -510,7 +510,8 @@ class Scion(Layer, Graphable):
         return last+1
 
     def addXcLink(self, a: Union[IA, Tuple[int, int]], b: Union[IA, Tuple[int, int]],
-                  linkType: LinkType, count: int=1, a_router: str="", b_router: str="",) -> 'Scion':
+                  linkType: LinkType, count: int=1, a_router: str="", b_router: str="",
+                  underlay_type: Optional[str]=None) -> 'Scion':
         """!
         @brief Create a direct cross-connect link between to ASes.
 
@@ -520,6 +521,7 @@ class Scion(Layer, Graphable):
         @param count Number of parallel links.
         @param a_router router of AS a default is ""
         @param b_router router of AS b default is ""
+        @param underlay_type Underlay protocol (e.g. "UDP/IPv6"). Written to .topo by ScionTopoCompiler.
 
         @throws AssertionError if link already exists or is link to self.
 
@@ -530,14 +532,15 @@ class Scion(Layer, Graphable):
         assert (a, b, a_router, b_router, linkType) not in self.__links, (
             "Link between as{} and as{} of type {} exists already.".format(a, b, linkType))
 
-        self.__links[(a, b, a_router, b_router, linkType)] = count
+        self.__links[(a, b, a_router, b_router, linkType)] = {'count': count, 'underlay_type': underlay_type}
 
         return self
 
 # additional arguments in 'kwargs':
 # i.e. a_IF_ID and b_IF_ID if known (i.e. by a DataProvider)
     def addIxLink(self, ix: int, a: Union[IA, Tuple[int, int]], b: Union[IA, Tuple[int, int]],
-                  linkType: LinkType, count: int=1, a_router: str="", b_router: str="", **kwargs) -> 'Scion':
+                  linkType: LinkType, count: int=1, a_router: str="", b_router: str="",
+                  underlay_type: Optional[str]=None, **kwargs) -> 'Scion':
         """!
         @brief Create a private link between two ASes at an IX.
 
@@ -548,6 +551,7 @@ class Scion(Layer, Graphable):
         @param count Number of parallel links.
         @param a_router router of AS a default is ""
         @param b_router router of AS b default is ""
+        @param underlay_type Underlay protocol (e.g. "UDP/IPv6"). Written to .topo by ScionTopoCompiler.
 
         @throws AssertionError if link already exists or is link to self.
 
@@ -571,7 +575,7 @@ class Scion(Layer, Graphable):
         if key in self.__ix_links.keys():
             self.__ix_links[key]['count'] += count
         else:
-            self.__ix_links[key] = {'count': count , 'if_ids': set()}
+            self.__ix_links[key] = {'count': count, 'if_ids': set(), 'underlay_type': underlay_type}
 
         self.__ix_links[key]['if_ids'].add(ids)
 
@@ -600,7 +604,8 @@ class Scion(Layer, Graphable):
         reg = emulator.getRegistry()
         scionIsd_layer: ScionIsd = reg.get('seedemu', 'layer', 'ScionIsd')
 
-        for (a, b, a_router, b_router, rel), count in self.__links.items():
+        for (a, b, a_router, b_router, rel), d in self.__links.items():
+            count = d['count']
             a_shape = 'doublecircle' if scionIsd_layer.isCoreAs(a.isd, a.asn) else 'circle'
             b_shape = 'doublecircle' if scionIsd_layer.isCoreAs(b.isd, b.asn) else 'circle'
 
@@ -678,7 +683,8 @@ class Scion(Layer, Graphable):
                 out += f' ({count} times)'
             out += '\n'
 
-        for (a, b, a_router, b_router, rel), count in self.__links.items():
+        for (a, b, a_router, b_router, rel), d in self.__links.items():
+            count = d['count']
             out += ' ' * indent
             if a_router == "":
                 out += f'XC: AS{a} -({rel})-> '
@@ -697,7 +703,9 @@ class Scion(Layer, Graphable):
     def _configure_links(self, reg: Registry, base_layer: ScionBase) -> None:
         """Configure SCION links with IFIDs, IPs, ports, etc."""
         # cross-connect links
-        for (a, b, a_router, b_router, rel), count in self.__links.items():
+        for (a, b, a_router, b_router, rel), d in self.__links.items():
+            count = d['count']
+            underlay_type = d.get('underlay_type')
             a_reg = ScopedRegistry(str(a.asn), reg)
             b_reg = ScopedRegistry(str(b.asn), reg)
             a_as = base_layer.getAutonomousSystem(a.asn)
@@ -728,11 +736,12 @@ class Scion(Layer, Graphable):
             for _ in range(count):
                 self._log(f"add scion XC link: {a_addr} as{a} -({rel})-> {b_addr} as{b}")
                 self.__create_link(a_router, b_router, a, b, a_as, b_as,
-                                a_addr, b_addr, net, rel)
+                                a_addr, b_addr, net, rel, underlay_type=underlay_type)
 
         # IX links
         for (ix, a, b, a_router, b_router, rel), d in self.__ix_links.items():
             count = d['count']
+            underlay_type = d.get('underlay_type')
             ix_reg = ScopedRegistry('ix', reg)
             a_reg = ScopedRegistry(str(a.asn), reg)
             b_reg = ScopedRegistry(str(b.asn), reg)
@@ -762,7 +771,7 @@ class Scion(Layer, Graphable):
                 for ids in d['if_ids']:
                     self.__create_link(a_ixrouter, b_ixrouter, a, b, a_as, b_as,
                                 str(a_ixif.getAddress()), str(b_ixif.getAddress()),
-                                ix_net, rel, if_ids = ids)
+                                ix_net, rel, if_ids=ids, underlay_type=underlay_type)
             else:
                 for _ in range(count):
                     self._log(f"add scion IX link: {a_ixif.getAddress()} AS{a} -({rel})->"
@@ -770,7 +779,7 @@ class Scion(Layer, Graphable):
 
                     self.__create_link(a_ixrouter, b_ixrouter, a, b, a_as, b_as,
                                 str(a_ixif.getAddress()), str(b_ixif.getAddress()),
-                                ix_net, rel)
+                                ix_net, rel, underlay_type=underlay_type)
 
     @staticmethod
     def __get_xc_routers(a: int, a_reg: ScopedRegistry, b: int, b_reg: ScopedRegistry) -> Tuple[Router, Router]:
@@ -800,7 +809,8 @@ class Scion(Layer, Graphable):
                      a_addr: str, b_addr: str,
                      net: Network,
                      rel: LinkType,
-                     if_ids=None ):
+                     if_ids=None,
+                     underlay_type: Optional[str]=None):
         """Create a link between SCION BRs a and b.
         In case of LinkType Transit: A is parent of B
         """
@@ -833,6 +843,8 @@ class Scion(Layer, Graphable):
             "link_to": rel.to_json(a_core, True),
             "mtu": net.getMtu(),
         }
+        if underlay_type is not None:
+            a_iface["underlay_type"] = underlay_type
         # TODO: additional settings according to config of 'as_a'
 
         b_iface = {
@@ -844,6 +856,8 @@ class Scion(Layer, Graphable):
             "link_to": rel.to_json(b_core, False),
             "mtu": net.getMtu(),
         }
+        if underlay_type is not None:
+            b_iface["underlay_type"] = underlay_type
         # TODO: additional settings according to config of 'as_b'
 
         # XXX(benthor): Remote interface id could probably be added
