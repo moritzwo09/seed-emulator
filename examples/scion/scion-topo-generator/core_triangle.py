@@ -2,18 +2,6 @@
 """
 Topology: core triangle — 1 ISD, 3 core ASes in a full mesh, 6 leaf ASes.
 
-  [AS150, mtu=1400]---Core---[AS151, mtu=1280]
-         |  \               /  |
-        Core  \           /   Core
-         |     \         /     |
-  [AS153]  [AS154-multi-homed] [AS155]
-  mtu=1500   mtu=1350          mtu=1500
-                 |
-  [AS152, mtu=1500]---Core---+
-         |                    |
-    [AS156] [AS157]        (completes
-    mtu=1500 mtu=1450       triangle)
-
 Full core mesh: 150 <-> 151 <-> 152 <-> 150
 Leaves per core:
   AS150 -> AS153, AS156 (via 152 subtree for AS156)

@@ -29,6 +29,21 @@ class ScionTopoCompiler(Compiler):
     def optionHandlingCapabilities(self) -> OptionHandling:
         return OptionHandling.UNSUPPORTED
 
+    @staticmethod
+    def _to_scion_ia(ia_str: str) -> str:
+        """Convert an ISD-AS string to SCION-native colon-hex format.
+
+        BGP-range decimal ASNs (e.g. '1-150') are mapped to the equivalent
+        SCION-native ff00:0:hex representation ('1-ff00:0:96') so that the
+        generated .topo file is accepted by SCION tooling that requires the
+        colon-hex format.  Already-converted strings (containing ':') are
+        returned unchanged.
+        """
+        if ':' in ia_str:
+            return ia_str
+        isd, asn_str = ia_str.split('-', 1)
+        return f"{isd}-ff00:0:{int(asn_str):x}"
+
     def _doCompile(self, emulator: Emulator) -> None:
         reg = emulator.getRegistry()
         base_layer: ScionBase = reg.get('seedemu', 'layer', 'Base')
@@ -105,18 +120,18 @@ class ScionTopoCompiler(Compiler):
             isds = scion_isd.getAsIsds(asn)
             assert len(isds) == 1, f"AS {asn} must belong to exactly one ISD"
             isd, is_core = isds[0]
-            ia_str = str(IA(isd, asn))
+            ia_str = self._to_scion_ia(str(IA(isd, asn)))
 
             f.write(f'  "{ia_str}":\n')
-            if is_core:
+            if is_core: # if it a core AS, write the attributes in the .topo file
                 attrs = as_.getAsAttributes(isd)
                 for attr in ['core', 'voting', 'authoritative', 'issuing']:
                     if attr in attrs:
                         f.write(f'    {attr}: true\n')
-            else:
+            else: # if not, then just write the cert_issuer
                 issuer_asn = scion_isd.getCertIssuer((isd, asn))
                 if issuer_asn is not None:
-                    issuer_ia = str(IA(isd, issuer_asn))
+                    issuer_ia = self._to_scion_ia(str(IA(isd, issuer_asn)))
                     f.write(f'    cert_issuer: {issuer_ia}\n')
 
             mtu = as_.getMtu()
@@ -136,22 +151,22 @@ class ScionTopoCompiler(Compiler):
 
         emitted: Set[Tuple[str, int]] = set()
 
-        for local_ia_str in sorted(all_ifaces):
+        for local_ia_str in sorted(all_ifaces): # go over all interfaces for all border routers
             for ifid, iface, rnode in all_ifaces[local_ia_str]:
                 if (local_ia_str, ifid) in emitted:
                     continue
 
-                link_to = iface['link_to']
+                link_to = iface['link_to'] # find out what type of link it is (CHILD, CORE, PEER, PARENT)
                 if link_to == 'PARENT':
                     emitted.add((local_ia_str, ifid))
                     continue
                 if link_to not in _PARTNER:
                     continue
 
-                remote_ia_str = iface['isd_as']
-                partner_link_to = _PARTNER[link_to]
+                remote_ia_str = iface['isd_as'] # find remote link's ISD-AS string
+                partner_link_to = _PARTNER[link_to] # find out what type of link the remote side has
 
-                candidates = [
+                candidates = [ # find all remote interfaces that match the local interface's link type and ISD-AS
                     (r_ifid, r_iface, r_rnode)
                     for (r_ifid, r_iface, r_rnode) in all_ifaces.get(remote_ia_str, [])
                     if r_iface['isd_as'] == local_ia_str
@@ -162,13 +177,15 @@ class ScionTopoCompiler(Compiler):
                     self._log(f"Warning: no partner found for {local_ia_str}#{ifid} ({link_to})")
                     continue
 
-                r_ifid, r_iface, r_rnode = candidates[0]
+                r_ifid, r_iface, r_rnode = candidates[0] # take the first one
 
-                emitted.add((local_ia_str, ifid))
-                emitted.add((remote_ia_str, r_ifid))
+                emitted.add((local_ia_str, ifid)) # marks as emitted so that we don't emit the same link twice
+                emitted.add((remote_ia_str, r_ifid)) # mark the remote interface as emitted as well
 
-                a_ep = self._format_endpoint(local_ia_str, rnode, ifid, letter_map)
-                b_ep = self._format_endpoint(remote_ia_str, r_rnode, r_ifid, letter_map)
+                local_out = self._to_scion_ia(local_ia_str)
+                remote_out = self._to_scion_ia(remote_ia_str)
+                a_ep = self._format_endpoint(local_out, rnode, ifid, letter_map)
+                b_ep = self._format_endpoint(remote_out, r_rnode, r_ifid, letter_map)
                 link_ato_b = _ATO_B[link_to]
                 mtu = iface.get('mtu')
 
